@@ -1,0 +1,58 @@
+name: HealthNexus SSD CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - "feature/**"
+  pull_request:
+    branches:
+      - main
+      - dev
+
+jobs:
+  ci:
+    name: CI Security Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get repository code
+        uses: actions/checkout@v4
+
+      - name: Show files
+        run: ls -la
+
+      - name: Check for hardcoded secrets
+        run: |
+          echo "Checking for possible hardcoded secrets..."
+          if grep -R -i "password=\|api_key\|apikey\|secret_key\|private_key" . --exclude-dir=.git; then
+            echo "Possible secret found. Please remove it."
+            exit 1
+          else
+            echo "No obvious hardcoded secrets found."
+          fi
+
+      - name: CI completed
+        run: echo "HealthNexus SSD CI passed."
+
+  deploy:
+    name: Deploy to VM
+    runs-on: ubuntu-latest
+    needs: ci
+
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy using SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_KEY }}
+          script: |
+            echo "Connected to HealthNexus VM"
+            cd ~/HealthNexusSSD || git clone https://github.com/Matzz2401229/HealthNexusSSD.git ~/HealthNexusSSD
+            cd ~/HealthNexusSSD
+            git pull origin main
+            echo "Deployment completed."
