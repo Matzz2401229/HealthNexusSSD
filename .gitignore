@@ -1,0 +1,36 @@
+# === Secrets — NEVER commit (SDR3, §7) ===
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.cert
+certs/
+secrets/
+
+# === Node ===
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# === Build output ===
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# === Frontend / PWA ===
+frontend/dev-dist/
+frontend/.vite/
+
+# === Uploads (medical documents live outside web root, never in git) ===
+uploads/
+
+# === Editors / OS ===
+.DS_Store
+.idea/
+.vscode/
+*.swp
+Claude_SSD.md
