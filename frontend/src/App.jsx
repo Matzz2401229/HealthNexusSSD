@@ -1,28 +1,33 @@
 import { Routes, Route, Link } from 'react-router-dom';
+import Navbar from './components/Navbar';
+import Home from './pages/Home';
+import Login from './pages/Login';
+import Register from './pages/Register';
 
 /**
- * App shell + routing skeleton. Role-based views (patient/doctor/pharmacist/
- * admin) plug in here as workstreams land. NOTE: any role checks in the UI are
- * for navigation/UX only — the real access control is server-side (D1 §9.2).
+ * App shell + routing. The Navbar renders on every page for consistent
+ * branding. Role-based dashboards (patient/doctor/pharmacist/admin) plug in as
+ * routes here as workstreams land — build them against the tokens in theme.css.
+ * NOTE: any role checks in the UI are for navigation only; real access control
+ * is enforced server-side (D1 §9.2).
  */
-function Home() {
+function NotFound() {
   return (
-    <div className="container py-5">
-      <h1 className="mb-3">HealthNexus</h1>
-      <p className="text-muted">Secure telemedicine &amp; EHR — skeleton frontend.</p>
-      <nav className="d-flex gap-3">
-        <Link to="/login">Login</Link>
-        <Link to="/register">Register</Link>
-      </nav>
+    <div className="hn-page">
+      <span className="hn-badge">404</span>
+      <h1 style={{ margin: '1rem 0 0.5rem' }}>Page not found</h1>
+      <p className="hn-text-muted">That page doesn’t exist yet.</p>
+      <Link to="/" className="hn-btn hn-btn-primary" style={{ marginTop: '0.5rem' }}>Back home</Link>
     </div>
   );
 }
 
+/* Simple placeholder for routes a workstream hasn't built yet. */
 function Placeholder({ title }) {
   return (
-    <div className="container py-5">
-      <h2>{title}</h2>
-      <p className="text-muted">TODO: implement in the relevant workstream.</p>
+    <div className="hn-page">
+      <h1>{title}</h1>
+      <p className="hn-text-muted">TODO: implement in the relevant workstream.</p>
       <Link to="/">← Home</Link>
     </div>
   );
@@ -30,11 +35,15 @@ function Placeholder({ title }) {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/login" element={<Placeholder title="Login" />} />
-      <Route path="/register" element={<Placeholder title="Register" />} />
-      <Route path="*" element={<Placeholder title="Not found" />} />
-    </Routes>
+    <>
+      <Navbar />
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<Placeholder title="Forgot password" />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </>
   );
 }
