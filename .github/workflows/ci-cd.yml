@@ -1,5 +1,7 @@
 name: HealthNexus SSD CI/CD
 
+# Runs on every feature branch and PR into dev/main so problems are caught
+# early (D2 §2.1). Deploy only happens on main (see the deploy job).
 on:
   push:
     branches:
@@ -11,33 +13,118 @@ on:
       - main
       - dev
 
+# Cancel an in-progress run if new commits are pushed to the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  ci:
-    name: CI - Basic Repository Check
+  # ---------------------------------------------------------------------
+  # Backend: install -> lint -> test -> dependency scan (SDR5, SDR6, NFSR9)
+  # ---------------------------------------------------------------------
+  backend:
+    name: Backend (lint, test, audit)
     runs-on: ubuntu-latest
-
+    defaults:
+      run:
+        working-directory: backend
     steps:
-      - name: Get repository code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Show repository files
-        run: |
-          echo "Listing repository files..."
-          ls -la
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
 
-      - name: Confirm project documentation exists
-        run: |
-          echo "Checking for README.md..."
-          test -f README.md
-          echo "README.md found."
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Check workflow file exists
-        run: |
-          echo "Checking GitHub Actions workflow..."
-          test -f .github/workflows/ci-cd.yml
-          echo "Workflow file found."
+      - name: Lint
+        run: npm run lint
 
-      - name: CI completed
+      - name: Run tests (with coverage)
+        run: npm test
+
+      # Dependency vulnerability scanning — blocks on high/critical CVEs (SDR5/NFSR9)
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
+  # ---------------------------------------------------------------------
+  # Frontend: install -> build -> dependency scan
+  # ---------------------------------------------------------------------
+  frontend:
+    name: Frontend (build, audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
+  # ---------------------------------------------------------------------
+  # SAST — static analysis on every PR (SDR4).
+  # NOTE: currently report-only (continue-on-error) so it doesn't block the
+  # team before findings are triaged. Flip continue-on-error to false to make
+  # it blocking on high/critical, as SDR4 ultimately requires.
+  # ---------------------------------------------------------------------
+  sast:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Semgrep
+        run: pipx install semgrep
+
+      - name: Run Semgrep
+        run: semgrep --config p/javascript --config p/typescript --config p/security-audit --error
+
+  # ---------------------------------------------------------------------
+  # Deploy to AWS EC2 — ONLY on push to main (D2 §2.2 auto-trigger evidence).
+  # PLACEHOLDER: the deploy (nginx/TLS/deploy) workstream fills in the real
+  # SSH deploy. Real secrets (EC2 host/user/key) go in GitHub repo secrets,
+  # never in this file (SDR3).
+  # ---------------------------------------------------------------------
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Placeholder deploy step
         run: |
-          echo "HealthNexus SSD CI pipeline completed successfully."
-          echo "Future stages will include React build, Express tests, Docker build, and EC2 deployment."
+          echo "Deploy job runs only on main."
+          echo "TODO (deploy workstream): SSH to EC2 and run:"
+          echo "  git pull && docker compose up -d --build"
+      # Example real deploy (uncomment + configure secrets when ready):
+      # - name: Deploy over SSH
+      #   uses: appleboy/ssh-action@v1
+      #   with:
+      #     host: ${{ secrets.EC2_HOST }}
+      #     username: ${{ secrets.EC2_USER }}
+      #     key: ${{ secrets.EC2_SSH_KEY }}
+      #     script: |
+      #       cd ~/HealthNexusSSD
+      #       git pull origin main
+      #       docker compose up -d --build
