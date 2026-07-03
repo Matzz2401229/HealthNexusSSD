@@ -3,6 +3,8 @@ import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Prescriptions from './pages/Prescriptions';
+import PharmacyQueue from './pages/PharmacyQueue';
 
 /**
  * App shell + routing. The Navbar renders on every page for consistent
@@ -42,6 +44,8 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<Placeholder title="Forgot password" />} />
+        <Route path="/prescriptions" element={<Prescriptions />} />
+        <Route path="/pharmacy" element={<PharmacyQueue />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </>
