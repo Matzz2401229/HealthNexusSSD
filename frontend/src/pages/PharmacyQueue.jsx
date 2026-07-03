@@ -1,24 +1,43 @@
 import { useEffect, useState } from 'react';
-import { apiGet } from '../lib/api';
+import { apiGet, apiPatch } from '../lib/api';
 
 /**
- * Pharmacist queue page (FR27). Fetches prescriptions awaiting fulfilment from
- * GET /api/prescriptions/pharmacy and shows only the dispensing details — no
- * diagnosis or medical history (FSR6). The "mark dispensed/rejected" action
- * (a write) needs CSRF handling and comes in a later step.
+ * Pharmacist queue page (FR27/FR28). Lists prescriptions awaiting fulfilment
+ * (GET /api/prescriptions/pharmacy) showing only dispensing details — no
+ * diagnosis/history (FSR6) — and lets the pharmacist mark each dispensed or
+ * rejected (PATCH .../fulfilment, the only field they may write).
  */
 export default function PharmacyQueue() {
   const [items, setItems] = useState([]);
   const [state, setState] = useState('loading');
+  const [busyId, setBusyId] = useState(null);
+  const [actionError, setActionError] = useState(null);
 
-  useEffect(() => {
+  function load() {
+    setState('loading');
     apiGet('/prescriptions/pharmacy')
       .then((data) => {
         setItems(data);
         setState('ready');
       })
       .catch(() => setState('error'));
-  }, []);
+  }
+
+  useEffect(load, []);
+
+  async function setFulfilment(id, fulfilmentStatus) {
+    setBusyId(id);
+    setActionError(null);
+    try {
+      await apiPatch(`/prescriptions/${id}/fulfilment`, { fulfilmentStatus });
+      // On success the item leaves the pending queue — reload to reflect it.
+      load();
+    } catch {
+      setActionError('Could not update — try again.');
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <div className="hn-page">
@@ -36,6 +55,10 @@ export default function PharmacyQueue() {
             Make sure the backend is running as a pharmacist (DEV_FAKE_ROLE=pharmacist).
           </p>
         </div>
+      )}
+
+      {actionError && (
+        <p style={{ color: 'var(--hn-danger)', fontSize: '0.9rem' }}>{actionError}</p>
       )}
 
       {state === 'ready' && items.length === 0 && (
@@ -57,7 +80,24 @@ export default function PharmacyQueue() {
                   Patient #{p.patient_id}
                 </span>
               </div>
-              {/* TODO: "Mark dispensed / rejected" buttons — needs CSRF (next step). */}
+
+              <div style={{ display: 'flex', gap: '0.6rem', marginTop: '1rem' }}>
+                <button
+                  className="hn-btn hn-btn-primary"
+                  disabled={busyId === p.id}
+                  onClick={() => setFulfilment(p.id, 'dispensed')}
+                >
+                  {busyId === p.id ? 'Saving…' : 'Mark dispensed'}
+                </button>
+                <button
+                  className="hn-btn hn-btn-outline"
+                  disabled={busyId === p.id}
+                  onClick={() => setFulfilment(p.id, 'rejected')}
+                  style={{ color: 'var(--hn-danger)', borderColor: 'var(--hn-danger)' }}
+                >
+                  Reject
+                </button>
+              </div>
             </div>
           ))}
         </div>
