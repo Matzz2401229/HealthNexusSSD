@@ -5,6 +5,8 @@
  */
 import { Router } from 'express';
 import authRoutes from './auth.routes';
+import appointmentRoutes from './appointment.routes';
+
 
 const router = Router();
 
