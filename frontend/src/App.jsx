@@ -3,6 +3,9 @@ import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import PatientAppointments from './pages/PatientAppointments';
+import DoctorSchedule from './pages/DoctorSchedule';
+
 
 /**
  * App shell + routing. The Navbar renders on every page for consistent
@@ -41,6 +44,8 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/patient/appointments" element={<PatientAppointments />} />
+        <Route path="/doctor/schedule" element={<DoctorSchedule />} />
         <Route path="/forgot-password" element={<Placeholder title="Forgot password" />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
