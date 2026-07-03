@@ -12,9 +12,9 @@ const router = Router();
 
 router.get('/health', (_req, res) => res.json({ status: 'ok' }));
 router.use('/auth', authRoutes);
+router.use('/appointments', appointmentRoutes);
 
 // TODO (workstreams §8):
-// router.use('/appointments', appointmentRoutes);
 // router.use('/prescriptions', prescriptionRoutes);
 // router.use('/documents', documentRoutes);
 // router.use('/admin', adminRoutes);
