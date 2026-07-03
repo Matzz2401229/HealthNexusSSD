@@ -5,15 +5,16 @@
  */
 import { Router } from 'express';
 import authRoutes from './auth.routes';
+import prescriptionRoutes from './prescription.routes';
 
 const router = Router();
 
 router.get('/health', (_req, res) => res.json({ status: 'ok' }));
 router.use('/auth', authRoutes);
+router.use('/prescriptions', prescriptionRoutes);
 
 // TODO (workstreams §8):
 // router.use('/appointments', appointmentRoutes);
-// router.use('/prescriptions', prescriptionRoutes);
 // router.use('/documents', documentRoutes);
 // router.use('/admin', adminRoutes);
 
