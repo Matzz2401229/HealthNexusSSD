@@ -1,29 +1,45 @@
-/**
- * Password policy + hashing (D1 §9.1).
- * - min 12 chars, upper/lower/digit/special
- * - bcrypt with per-password unique salt (bcrypt generates the salt)
- * - never store or log plaintext
- */
-import bcrypt from 'bcryptjs';
-import { config } from '../config/env';
+import bcryptjs from 'bcryptjs';
 
-const MIN_LENGTH = 12;
+const BCRYPT_COST = 12;
 
-/** Returns null if valid, or a human-readable reason if not. */
-export function validatePasswordPolicy(password: string): string | null {
-  if (password.length < MIN_LENGTH) return `Password must be at least ${MIN_LENGTH} characters.`;
-  if (!/[a-z]/.test(password)) return 'Password must contain a lowercase letter.';
-  if (!/[A-Z]/.test(password)) return 'Password must contain an uppercase letter.';
-  if (!/[0-9]/.test(password)) return 'Password must contain a digit.';
-  if (!/[^A-Za-z0-9]/.test(password)) return 'Password must contain a special character.';
-  return null;
+export function validatePasswordPolicy(password: string): string[] {
+  const errors: string[] = [];
+
+  if (typeof password !== 'string' || password.length < 12) {
+    errors.push('Password must be at least 12 characters long.');
+  }
+  if (!/[A-Z]/.test(password)) {
+    errors.push('Password must contain at least one uppercase letter.');
+  }
+  if (!/[a-z]/.test(password)) {
+    errors.push('Password must contain at least one lowercase letter.');
+  }
+  if (!/[0-9]/.test(password)) {
+    errors.push('Password must contain at least one digit.');
+  }
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    errors.push('Password must contain at least one special character.');
+  }
+  if (typeof password === 'string' && password.length > 128) {
+    errors.push('Password must not exceed 128 characters.');
+  }
+
+  return errors;
 }
 
-export async function hashPassword(password: string): Promise<string> {
-  // bcrypt.hash generates a unique salt per call and embeds it in the output.
-  return bcrypt.hash(password, config.bcryptRounds);
+export function hashPassword(plaintext: string): Promise<string> {
+  return bcryptjs.hash(plaintext, BCRYPT_COST);
 }
 
-export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(password, hash);
+export function verifyPassword(plaintext: string, hash: string): Promise<boolean> {
+  return bcryptjs.compare(plaintext, hash);
+}
+
+const DUMMY_HASH = bcryptjs.hashSync(
+  `dummy-${Date.now()}-${Math.random()}`,
+  BCRYPT_COST,
+);
+
+export function dummyPasswordCompare(plaintext: string): Promise<boolean> {
+  return bcryptjs.compare(plaintext, DUMMY_HASH);
 }

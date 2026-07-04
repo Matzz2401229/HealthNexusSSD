@@ -18,7 +18,7 @@ type OwnershipResolver = (userId: number, role: string, resourceId: number) => P
  */
 export function requireOwnership(paramName: string, resolver: OwnershipResolver) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    if (!req.user) {
+    if (!req.session.user) {
       res.status(401).json({ error: 'Authentication required.' });
       return;
     }
@@ -30,7 +30,7 @@ export function requireOwnership(paramName: string, resolver: OwnershipResolver)
     }
 
     try {
-      const allowed = await resolver(req.user.id, req.user.role, resourceId);
+      const allowed = await resolver(req.session.user.id, req.session.user.role, resourceId);
       if (!allowed) {
         // Generic 404 (not 403) avoids confirming the resource exists (anti-IDOR).
         res.status(404).json({ error: 'Not found.' });

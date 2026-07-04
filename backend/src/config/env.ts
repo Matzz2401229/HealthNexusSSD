@@ -54,3 +54,6 @@ export const config = {
     return this.nodeEnv === 'production';
   },
 };
+
+// Alias for compatibility
+export const env = config;
