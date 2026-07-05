@@ -10,10 +10,11 @@ import { apiGet, apiPost } from '../lib/api';
  * (FSR4) and takes the doctor id from the session (FSR2) — the UI is convenience
  * only, never the security boundary. Field limits mirror the server schema.
  */
-const EMPTY = { patientId: '', medication: '', dosage: '', instructions: '' };
+const EMPTY = { patientId: '', appointmentId: '', medication: '', dosage: '', instructions: '' };
 
 export default function IssuePrescription() {
   const [patients, setPatients] = useState([]);
+  const [appointments, setAppointments] = useState([]);
   const [state, setState] = useState('loading'); // loading | ready | error
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
@@ -28,6 +29,19 @@ export default function IssuePrescription() {
       })
       .catch(() => setState('error'));
   }, []);
+
+  // Load the chosen patient's appointments so the doctor can tag the prescription
+  // to a specific consultation (optional — leaving it blank auto-captures the
+  // most recent appointment server-side).
+  useEffect(() => {
+    if (!form.patientId) {
+      setAppointments([]);
+      return;
+    }
+    apiGet(`/prescriptions/appointments?patientId=${form.patientId}`)
+      .then(setAppointments)
+      .catch(() => setAppointments([]));
+  }, [form.patientId]);
 
   const update = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -45,6 +59,8 @@ export default function IssuePrescription() {
     try {
       const payload = {
         patientId: Number(form.patientId),
+        // optional: a specific appointment; blank lets the server auto-capture
+        appointmentId: form.appointmentId ? Number(form.appointmentId) : undefined,
         medication: form.medication.trim(),
         dosage: form.dosage.trim(),
         // send instructions only when provided (the field is optional server-side)
@@ -116,7 +132,7 @@ export default function IssuePrescription() {
                 id="patientId"
                 name="patientId"
                 value={form.patientId}
-                onChange={update}
+                onChange={(e) => setForm({ ...form, patientId: e.target.value, appointmentId: '' })}
                 required
               >
                 <option value="">Select a patient…</option>
@@ -127,6 +143,29 @@ export default function IssuePrescription() {
                 ))}
               </select>
             </div>
+
+            {appointments.length > 0 && (
+              <div className="hn-field">
+                <label className="hn-label" htmlFor="appointmentId">
+                  Appointment <span className="hn-text-muted">(optional)</span>
+                </label>
+                <select
+                  className="hn-select"
+                  id="appointmentId"
+                  name="appointmentId"
+                  value={form.appointmentId}
+                  onChange={update}
+                >
+                  <option value="">Most recent (auto)</option>
+                  {appointments.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {new Date(a.scheduled_at).toLocaleString()} — {a.status}
+                    </option>
+                  ))}
+                </select>
+                <p className="hn-hint">Which consultation this prescription relates to.</p>
+              </div>
+            )}
 
             <div className="hn-field">
               <label className="hn-label" htmlFor="medication">Medication</label>
