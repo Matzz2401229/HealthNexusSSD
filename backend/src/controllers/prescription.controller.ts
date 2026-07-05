@@ -1,9 +1,10 @@
 /**
  * Prescriptions & pharmacist — HTTP layer (workstream #6).
  * Thin controllers: translate the request into a service call and the result
- * into an HTTP status. All handlers run behind requireAuth, so req.user is set.
+ * into an HTTP status. All handlers run behind requireAuth, so req.session.user is set.
  */
 import { Request, Response, NextFunction } from 'express';
+import 'express-session';
 import * as prescriptions from '../services/prescription.service';
 import { NotAuthorisedError, Prescription } from '../services/prescription.service';
 import { recordAudit } from '../services/audit.service';
@@ -17,7 +18,7 @@ function parseId(raw: string): number | null {
 // POST /prescriptions  (doctor issues)
 export async function issue(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const created = await prescriptions.issuePrescription(req.user!.id, req.body);
+    const created = await prescriptions.issuePrescription(req.session.user!.id, req.body);
     res.status(201).json(created);
   } catch (err) {
     if (err instanceof NotAuthorisedError) {
@@ -31,7 +32,7 @@ export async function issue(req: Request, res: Response, next: NextFunction): Pr
 // GET /prescriptions/mine  (patient's own list)
 export async function listMine(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    res.json(await prescriptions.listForPatient(req.user!.id));
+    res.json(await prescriptions.listForPatient(req.session.user!.id));
   } catch (err) {
     next(err);
   }
@@ -54,7 +55,7 @@ export async function getOne(req: Request, res: Response, next: NextFunction): P
       res.status(400).json({ error: 'Invalid prescription id.' });
       return;
     }
-    const row = await prescriptions.getForUser(id, req.user!);
+    const row = await prescriptions.getForUser(id, req.session.user!);
     if (!row) {
       res.status(404).json({ error: 'Not found.' });
       return;
@@ -73,14 +74,14 @@ export async function download(req: Request, res: Response, next: NextFunction):
       res.status(400).json({ error: 'Invalid prescription id.' });
       return;
     }
-    const row = await prescriptions.getForUser(id, req.user!);
+    const row = await prescriptions.getForUser(id, req.session.user!);
     if (!row) {
       res.status(404).json({ error: 'Not found.' });
       return;
     }
     await recordAudit({
-      userId: req.user!.id,
-      role: req.user!.role,
+      userId: req.session.user!.id,
+      role: req.session.user!.role,
       action: 'prescription.download',
       target: `prescription:${id}`,
       result: 'success',
@@ -101,7 +102,7 @@ export async function updateFulfilment(req: Request, res: Response, next: NextFu
       res.status(400).json({ error: 'Invalid prescription id.' });
       return;
     }
-    const ok = await prescriptions.updateFulfilment(id, req.user!.id, req.body.fulfilmentStatus);
+    const ok = await prescriptions.updateFulfilment(id, req.session.user!.id, req.body.fulfilmentStatus);
     if (!ok) {
       res.status(404).json({ error: 'Prescription not found or already actioned.' });
       return;

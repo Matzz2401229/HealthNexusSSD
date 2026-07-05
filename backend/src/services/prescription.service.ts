@@ -8,9 +8,9 @@
  *  - clinical fields are never written after issue (FSR13; DB trigger backs this)
  *  - pharmacists can only move fulfilment status, and only see prescription
  *    fields — never diagnosis/history (FSR6)
- *  - all DB access is parameterised (FSR9)
+ *  - all DB access is parameterised with positional ? placeholders (FSR9)
  */
-import { pool, query } from '../db/pool';
+import { pool } from '../db/pool';
 import { recordAudit } from './audit.service';
 import type { Role } from '../middleware/auth';
 import type { ResultSetHeader } from 'mysql2';
@@ -55,15 +55,15 @@ export async function issuePrescription(doctorId: number, input: IssueInput): Pr
   const result = await runWrite(
     `INSERT INTO prescription
        (patient_id, doctor_id, appointment_id, medication, dosage, instructions, status, fulfilment_status)
-     VALUES (:patientId, :doctorId, :appointmentId, :medication, :dosage, :instructions, 'issued', 'pending')`,
-    {
-      patientId: input.patientId,
+     VALUES (?, ?, ?, ?, ?, ?, 'issued', 'pending')`,
+    [
+      input.patientId,
       doctorId,
-      appointmentId: input.appointmentId ?? null,
-      medication: input.medication,
-      dosage: input.dosage,
-      instructions: input.instructions ?? null,
-    },
+      input.appointmentId ?? null,
+      input.medication,
+      input.dosage,
+      input.instructions ?? null,
+    ],
   );
 
   await recordAudit({
@@ -80,9 +80,9 @@ export async function issuePrescription(doctorId: number, input: IssueInput): Pr
 // --- 2. List a patient's own prescriptions --------------------------------
 export async function listForPatient(patientId: number): Promise<Prescription[]> {
   // patientId is the session user's id, not a URL parameter → no IDOR (FSR3).
-  return query<Prescription>(
-    `SELECT * FROM prescription WHERE patient_id = :patientId ORDER BY issued_at DESC`,
-    { patientId },
+  return runQuery<Prescription>(
+    `SELECT * FROM prescription WHERE patient_id = ? ORDER BY issued_at DESC`,
+    [patientId],
   );
 }
 
@@ -112,7 +112,7 @@ export interface PharmacyQueueItem {
 export async function pharmacyQueue(): Promise<PharmacyQueueItem[]> {
   // FSR6: select ONLY the fields a pharmacist needs to dispense — no diagnosis,
   // no medical history. Never `SELECT *` here.
-  return query<PharmacyQueueItem>(
+  return runQuery<PharmacyQueueItem>(
     `SELECT id, patient_id, medication, dosage, instructions, status, fulfilment_status, issued_at
        FROM prescription
       WHERE status = 'issued' AND fulfilment_status = 'pending'
@@ -136,9 +136,9 @@ export async function updateFulfilment(
   // re-actioning an already-handled prescription.
   const result = await runWrite(
     `UPDATE prescription
-        SET fulfilment_status = :newStatus, fulfilled_by = :pharmacistId, fulfilled_at = NOW()
-      WHERE id = :prescriptionId AND status = 'issued' AND fulfilment_status = 'pending'`,
-    { newStatus, pharmacistId, prescriptionId },
+        SET fulfilment_status = ?, fulfilled_by = ?, fulfilled_at = NOW()
+      WHERE id = ? AND status = 'issued' AND fulfilment_status = 'pending'`,
+    [newStatus, pharmacistId, prescriptionId],
   );
 
   const updated = result.affectedRows === 1;
@@ -154,27 +154,33 @@ export async function updateFulfilment(
 
 // --- helpers --------------------------------------------------------------
 
+/** Run a SELECT and return the rows. */
+async function runQuery<T>(sql: string, params: unknown[] = []): Promise<T[]> {
+  const [rows] = await pool.execute(sql, params as never);
+  return rows as T[];
+}
+
 /** Run an INSERT/UPDATE and return the raw result (insertId, affectedRows). */
-async function runWrite(sql: string, params: Record<string, unknown>): Promise<ResultSetHeader> {
+async function runWrite(sql: string, params: unknown[]): Promise<ResultSetHeader> {
   const [result] = await pool.execute(sql, params as never);
   return result as ResultSetHeader;
 }
 
 async function getPrescriptionRaw(id: number): Promise<Prescription | null> {
-  const rows = await query<Prescription>(`SELECT * FROM prescription WHERE id = :id`, { id });
+  const rows = await runQuery<Prescription>(`SELECT * FROM prescription WHERE id = ?`, [id]);
   return rows[0] ?? null;
 }
 
 /** FSR4: true if the doctor has an active treatment link or appointment. */
 async function hasTreatmentRelationship(doctorId: number, patientId: number): Promise<boolean> {
-  const rows = await query(
+  const rows = await runQuery(
     `SELECT 1 FROM doctor_patient_auth
-       WHERE doctor_id = :doctorId AND patient_id = :patientId AND revoked_at IS NULL
+       WHERE doctor_id = ? AND patient_id = ? AND revoked_at IS NULL
      UNION
      SELECT 1 FROM appointment
-       WHERE doctor_id = :doctorId AND patient_id = :patientId
+       WHERE doctor_id = ? AND patient_id = ?
      LIMIT 1`,
-    { doctorId, patientId },
+    [doctorId, patientId, doctorId, patientId],
   );
   return rows.length > 0;
 }

@@ -37,7 +37,7 @@ const next = jest.fn();
 beforeEach(() => jest.clearAllMocks());
 
 describe('issue (POST /prescriptions)', () => {
-  const req = { user: { id: 7, role: 'doctor' }, body: { patientId: 5, medication: 'x', dosage: 'y' } } as unknown as Request;
+  const req = { session: { user: { id: 7, role: 'doctor' } }, body: { patientId: 5, medication: 'x', dosage: 'y' } } as unknown as Request;
 
   it('returns 201 with the created prescription', async () => {
     svc.issuePrescription.mockResolvedValueOnce({ id: 42 } as never);
@@ -57,7 +57,7 @@ describe('issue (POST /prescriptions)', () => {
 
 describe('getOne (GET /prescriptions/:id)', () => {
   it('returns 400 for a non-numeric id', async () => {
-    const req = { user: { id: 1, role: 'patient' }, params: { id: 'abc' } } as unknown as Request;
+    const req = { session: { user: { id: 1, role: 'patient' } }, params: { id: 'abc' } } as unknown as Request;
     const res = mockRes();
     await controller.getOne(req, res, next);
     expect(res.statusCode).toBe(400);
@@ -65,7 +65,7 @@ describe('getOne (GET /prescriptions/:id)', () => {
 
   it('returns 404 when the user may not see it', async () => {
     svc.getForUser.mockResolvedValueOnce(null);
-    const req = { user: { id: 1, role: 'patient' }, params: { id: '9' } } as unknown as Request;
+    const req = { session: { user: { id: 1, role: 'patient' } }, params: { id: '9' } } as unknown as Request;
     const res = mockRes();
     await controller.getOne(req, res, next);
     expect(res.statusCode).toBe(404);
@@ -73,7 +73,7 @@ describe('getOne (GET /prescriptions/:id)', () => {
 
   it('returns 200 with the prescription when allowed', async () => {
     svc.getForUser.mockResolvedValueOnce({ id: 9 } as never);
-    const req = { user: { id: 1, role: 'patient' }, params: { id: '9' } } as unknown as Request;
+    const req = { session: { user: { id: 1, role: 'patient' } }, params: { id: '9' } } as unknown as Request;
     const res = mockRes();
     await controller.getOne(req, res, next);
     expect(res.statusCode).toBe(200);
@@ -81,7 +81,7 @@ describe('getOne (GET /prescriptions/:id)', () => {
 });
 
 describe('updateFulfilment (PATCH /prescriptions/:id/fulfilment)', () => {
-  const req = { user: { id: 3, role: 'pharmacist' }, params: { id: '9' }, body: { fulfilmentStatus: 'dispensed' } } as unknown as Request;
+  const req = { session: { user: { id: 3, role: 'pharmacist' } }, params: { id: '9' }, body: { fulfilmentStatus: 'dispensed' } } as unknown as Request;
 
   it('returns 200 when the update succeeds', async () => {
     svc.updateFulfilment.mockResolvedValueOnce(true);
