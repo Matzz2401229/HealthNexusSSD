@@ -20,6 +20,7 @@ import {
   updateFulfilment,
   getForUser,
   pharmacyQueue,
+  listAuthorisedPatients,
   NotAuthorisedError,
 } from '../src/services/prescription.service';
 
@@ -94,6 +95,36 @@ describe('getForUser (FSR3 ownership / IDOR)', () => {
     mockExecute.mockResolvedValueOnce(rows([{ id: 7, patient_id: 200, doctor_id: 5 }]));
     const res = await getForUser(7, { id: 200, role: 'patient' });
     expect(res?.id).toBe(7);
+  });
+});
+
+describe('listAuthorisedPatients (FSR4 scope, FSR2 identity)', () => {
+  it('passes the session doctorId positionally, never a client value', async () => {
+    mockExecute.mockResolvedValueOnce(rows([{ id: 1, full_name: 'Test Patient' }]));
+    await listAuthorisedPatients(7);
+    // both ? placeholders are the same session doctorId (auth-check + appointment side)
+    expect(mockExecute.mock.calls[0][1]).toEqual([7, 7]);
+  });
+
+  it('scopes to treatment/appointment links and returns only id + name', async () => {
+    mockExecute.mockResolvedValueOnce(rows([]));
+    await listAuthorisedPatients(7);
+    const sql = mockExecute.mock.calls[0][0] as string;
+    expect(sql).toMatch(/doctor_patient_auth/i);
+    expect(sql).toMatch(/appointment/i);
+    expect(sql).toMatch(/revoked_at IS NULL/i);
+    // least privilege: never pulls medical history / diagnosis
+    expect(sql).not.toMatch(/diagnosis|medical|remarks|dob|SELECT \*/i);
+  });
+
+  it('returns the rows the query produces', async () => {
+    mockExecute.mockResolvedValueOnce(rows([
+      { id: 1, full_name: 'Test Patient' },
+      { id: 2, full_name: 'Another Patient' },
+    ]));
+    const patients = await listAuthorisedPatients(7);
+    expect(patients).toHaveLength(2);
+    expect(patients[0]).toEqual({ id: 1, full_name: 'Test Patient' });
   });
 });
 
