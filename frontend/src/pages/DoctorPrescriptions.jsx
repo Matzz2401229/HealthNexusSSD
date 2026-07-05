@@ -74,8 +74,12 @@ export default function DoctorPrescriptions() {
       {state === 'ready' && items.length > 0 && (
         <div style={{ display: 'grid', gap: '1rem', marginTop: '1.5rem' }}>
           {items.map((p) => {
-            const f = FULFILMENT_LABEL[p.fulfilment_status] ?? { text: p.fulfilment_status, color: 'var(--hn-muted)' };
             const cancellable = p.status === 'issued' && p.fulfilment_status === 'pending';
+            // A cancelled prescription shows "Cancelled" — not its leftover
+            // fulfilment status (which stays 'pending' since it was never dispensed).
+            const f = p.status === 'cancelled'
+              ? { text: 'Cancelled', color: 'var(--hn-danger)' }
+              : (FULFILMENT_LABEL[p.fulfilment_status] ?? { text: p.fulfilment_status, color: 'var(--hn-muted)' });
             return (
               <div className="hn-card" key={p.id}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '1rem' }}>
@@ -96,11 +100,6 @@ export default function DoctorPrescriptions() {
                     {f.text}
                   </span>
                 </div>
-                {p.status === 'cancelled' && (
-                  <p style={{ margin: '0.75rem 0 0', color: 'var(--hn-danger)', fontSize: '0.85rem' }}>
-                    This prescription was cancelled.
-                  </p>
-                )}
                 <div style={{ marginTop: '1rem', display: 'flex', gap: '0.6rem' }}>
                   <a className="hn-btn hn-btn-outline" href={`/api/prescriptions/${p.id}/download`}>
                     Download
