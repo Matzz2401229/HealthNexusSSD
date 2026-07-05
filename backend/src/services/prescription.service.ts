@@ -31,6 +31,7 @@ export interface Prescription {
   fulfilled_by: number | null;
   fulfilled_at: string | null;
   issued_at: string;
+  appointment_at?: string | null; // scheduled_at of the linked appointment, when joined
 }
 
 export interface IssueInput {
@@ -51,6 +52,12 @@ export async function issuePrescription(doctorId: number, input: IssueInput): Pr
     throw new NotAuthorisedError('No treatment relationship with this patient.');
   }
 
+  // Record the treatment context (FSR4): use the appointment the caller named,
+  // otherwise fall back to this doctor+patient's most recent appointment, so the
+  // prescription is traceable to a consultation instead of storing NULL.
+  const appointmentId =
+    input.appointmentId ?? (await latestAppointmentId(doctorId, input.patientId));
+
   // doctorId is the session user's id — NEVER taken from client input (FSR2).
   const result = await runWrite(
     `INSERT INTO prescription
@@ -59,7 +66,7 @@ export async function issuePrescription(doctorId: number, input: IssueInput): Pr
     [
       input.patientId,
       doctorId,
-      input.appointmentId ?? null,
+      appointmentId,
       input.medication,
       input.dosage,
       input.instructions ?? null,
@@ -80,8 +87,14 @@ export async function issuePrescription(doctorId: number, input: IssueInput): Pr
 // --- 2. List a patient's own prescriptions --------------------------------
 export async function listForPatient(patientId: number): Promise<Prescription[]> {
   // patientId is the session user's id, not a URL parameter → no IDOR (FSR3).
+  // LEFT JOIN the appointment so the patient can see which consultation each
+  // prescription relates to (appointment_at is null for older/unlinked records).
   return runQuery<Prescription>(
-    `SELECT * FROM prescription WHERE patient_id = ? ORDER BY issued_at DESC`,
+    `SELECT p.*, a.scheduled_at AS appointment_at
+       FROM prescription p
+       LEFT JOIN appointment a ON a.id = p.appointment_id
+      WHERE p.patient_id = ?
+      ORDER BY p.issued_at DESC`,
     [patientId],
   );
 }
@@ -149,7 +162,69 @@ export async function listAuthorisedPatients(doctorId: number): Promise<Authoris
   );
 }
 
-// --- 6. Update fulfilment status (pharmacist, status-only) ----------------
+// --- 5b. A doctor's appointments with a patient (backs the issue picker) --
+export interface IssueAppointment {
+  id: number;
+  scheduled_at: string;
+  status: string;
+}
+
+/**
+ * List the appointments between a doctor and a given patient, so the doctor can
+ * pick which consultation a prescription relates to (FSR4 treatment context).
+ * Scoped by doctor_id (from the session) so a doctor only ever sees their own
+ * appointments — never another doctor's (FSR3). Parameterised (FSR9).
+ */
+export async function listAppointmentsForIssue(
+  doctorId: number,
+  patientId: number,
+): Promise<IssueAppointment[]> {
+  return runQuery<IssueAppointment>(
+    `SELECT id, scheduled_at, status
+       FROM appointment
+      WHERE doctor_id = ? AND patient_id = ?
+      ORDER BY scheduled_at DESC`,
+    [doctorId, patientId],
+  );
+}
+
+// --- 6. A doctor's own issued prescriptions (view + track fulfilment) -----
+export interface DoctorPrescriptionItem {
+  id: number;
+  patient_id: number;
+  patient_name: string;
+  medication: string;
+  dosage: string;
+  instructions: string | null;
+  status: PrescriptionStatus;
+  fulfilment_status: FulfilmentStatus;
+  issued_at: string;
+  fulfilled_at: string | null;
+  appointment_at: string | null;
+}
+
+/**
+ * List the prescriptions a doctor has issued, with the patient's name and the
+ * current fulfilment status (Data Control Matrix §9.8: a doctor may "view
+ * fulfilment status"). doctorId comes from the session, never client input
+ * (FSR2); the WHERE clause scopes strictly to the doctor's own records (FSR3).
+ */
+export async function listForDoctor(doctorId: number): Promise<DoctorPrescriptionItem[]> {
+  return runQuery<DoctorPrescriptionItem>(
+    `SELECT p.id, p.patient_id, pt.full_name AS patient_name,
+            p.medication, p.dosage, p.instructions,
+            p.status, p.fulfilment_status, p.issued_at, p.fulfilled_at,
+            a.scheduled_at AS appointment_at
+       FROM prescription p
+       JOIN patient pt ON pt.id = p.patient_id
+       LEFT JOIN appointment a ON a.id = p.appointment_id
+      WHERE p.doctor_id = ?
+      ORDER BY p.issued_at DESC`,
+    [doctorId],
+  );
+}
+
+// --- 7. Update fulfilment status (pharmacist, status-only) ----------------
 export async function updateFulfilment(
   prescriptionId: number,
   pharmacistId: number,
@@ -181,6 +256,34 @@ export async function updateFulfilment(
   return updated;
 }
 
+// --- 8. Cancel a prescription (doctor, own + still-pending only) -----------
+export async function cancelPrescription(
+  prescriptionId: number,
+  doctorId: number,
+): Promise<boolean> {
+  // Only the issuing doctor may cancel, and only while the prescription is
+  // still issued + pending — you cannot cancel one a pharmacist has already
+  // dispensed or rejected. The doctor_id in the WHERE clause enforces ownership
+  // (IDOR-safe, FSR3). Changing `status` is permitted by the immutability
+  // trigger; the clinical fields stay locked (FSR13).
+  const result = await runWrite(
+    `UPDATE prescription
+        SET status = 'cancelled'
+      WHERE id = ? AND doctor_id = ? AND status = 'issued' AND fulfilment_status = 'pending'`,
+    [prescriptionId, doctorId],
+  );
+
+  const cancelled = result.affectedRows === 1;
+  await recordAudit({
+    userId: doctorId,
+    role: 'doctor',
+    action: 'prescription.cancel',
+    target: `prescription:${prescriptionId}`,
+    result: cancelled ? 'success' : 'failure',
+  });
+  return cancelled;
+}
+
 // --- helpers --------------------------------------------------------------
 
 /** Run a SELECT and return the rows. */
@@ -198,6 +301,18 @@ async function runWrite(sql: string, params: unknown[]): Promise<ResultSetHeader
 async function getPrescriptionRaw(id: number): Promise<Prescription | null> {
   const rows = await runQuery<Prescription>(`SELECT * FROM prescription WHERE id = ?`, [id]);
   return rows[0] ?? null;
+}
+
+/** The doctor+patient's most recent appointment id, or null if none exists. */
+async function latestAppointmentId(doctorId: number, patientId: number): Promise<number | null> {
+  const rows = await runQuery<{ id: number }>(
+    `SELECT id FROM appointment
+       WHERE doctor_id = ? AND patient_id = ?
+       ORDER BY scheduled_at DESC
+       LIMIT 1`,
+    [doctorId, patientId],
+  );
+  return rows[0]?.id ?? null;
 }
 
 /** FSR4: true if the doctor has an active treatment link or appointment. */

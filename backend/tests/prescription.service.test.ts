@@ -18,9 +18,13 @@ import { pool } from '../src/db/pool';
 import {
   issuePrescription,
   updateFulfilment,
+  listForPatient,
   getForUser,
   pharmacyQueue,
   listAuthorisedPatients,
+  listAppointmentsForIssue,
+  listForDoctor,
+  cancelPrescription,
   NotAuthorisedError,
 } from '../src/services/prescription.service';
 
@@ -45,17 +49,33 @@ describe('issuePrescription (FSR4 treatment relationship)', () => {
     expect(mockExecute.mock.calls[0][0]).not.toMatch(/INSERT/i);
   });
 
-  it('issues with doctor_id taken from the session, not the input (FSR2)', async () => {
+  it('issues with doctor_id from the session and auto-captures the treating appointment', async () => {
     mockExecute.mockResolvedValueOnce(rows([{ '1': 1 }]));                 // relationship exists
+    mockExecute.mockResolvedValueOnce(rows([{ id: 55 }]));                 // latestAppointmentId -> 55
     mockExecute.mockResolvedValueOnce(write({ insertId: 42 }));            // INSERT
     mockExecute.mockResolvedValueOnce(rows([{ id: 42, doctor_id: 7 }]));   // re-fetch
 
     const created = await issuePrescription(7, { patientId: 5, medication: 'Amoxicillin', dosage: '500mg' });
 
     expect(created.id).toBe(42);
-    // INSERT params are positional: [patientId, doctorId, ...] — doctorId (index 1) must be the session id 7
-    const insertParams = mockExecute.mock.calls[1][1] as unknown[];
-    expect(insertParams[1]).toBe(7);
+    // the appointment lookup queried the appointment table (FSR4 context)
+    expect(mockExecute.mock.calls[1][0] as string).toMatch(/FROM appointment/i);
+    // INSERT params are positional: [patientId, doctorId, appointmentId, ...]
+    const insertParams = mockExecute.mock.calls[2][1] as unknown[];
+    expect(insertParams[1]).toBe(7);   // doctorId from session (FSR2)
+    expect(insertParams[2]).toBe(55);  // appointmentId auto-resolved (FSR4)
+  });
+
+  it('respects an explicit appointmentId and skips the lookup', async () => {
+    mockExecute.mockResolvedValueOnce(rows([{ '1': 1 }]));                 // relationship exists
+    mockExecute.mockResolvedValueOnce(write({ insertId: 43 }));            // INSERT (no lookup)
+    mockExecute.mockResolvedValueOnce(rows([{ id: 43 }]));                 // re-fetch
+
+    await issuePrescription(7, { patientId: 5, appointmentId: 9, medication: 'X', dosage: '1mg' });
+
+    // no appointment lookup ran — the 2nd DB call is the INSERT, with appointmentId 9
+    expect(mockExecute.mock.calls[1][0] as string).toMatch(/INSERT/i);
+    expect((mockExecute.mock.calls[1][1] as unknown[])[2]).toBe(9);
   });
 });
 
@@ -81,6 +101,26 @@ describe('updateFulfilment (FSR6 / FSR13 pharmacist)', () => {
   it('returns false when the prescription was already actioned', async () => {
     mockExecute.mockResolvedValueOnce(write({ affectedRows: 0 }));
     expect(await updateFulfilment(5, 9, 'dispensed')).toBe(false);
+  });
+});
+
+describe('cancelPrescription (doctor, own + still-pending only)', () => {
+  it('cancels via status only, scoped to own + pending (never touches clinical fields)', async () => {
+    mockExecute.mockResolvedValueOnce(write({ affectedRows: 1 }));
+    const ok = await cancelPrescription(9, 2);
+    expect(ok).toBe(true);
+    const sql = mockExecute.mock.calls[0][0] as string;
+    expect(sql).toMatch(/SET status = 'cancelled'/i);
+    expect(sql).toMatch(/doctor_id = \?/i);              // ownership guard (FSR3)
+    expect(sql).toMatch(/fulfilment_status = 'pending'/i); // can't cancel a dispensed one
+    expect(sql).not.toMatch(/medication|dosage/i);       // clinical fields untouched (FSR13)
+    // params: [prescriptionId, doctorId]
+    expect(mockExecute.mock.calls[0][1]).toEqual([9, 2]);
+  });
+
+  it('returns false when nothing matched (not owner / already dispensed / already cancelled)', async () => {
+    mockExecute.mockResolvedValueOnce(write({ affectedRows: 0 }));
+    expect(await cancelPrescription(9, 2)).toBe(false);
   });
 });
 
@@ -125,6 +165,51 @@ describe('listAuthorisedPatients (FSR4 scope, FSR2 identity)', () => {
     const patients = await listAuthorisedPatients(7);
     expect(patients).toHaveLength(2);
     expect(patients[0]).toEqual({ id: 1, full_name: 'Test Patient' });
+  });
+});
+
+describe('listForPatient (FSR3 own records + appointment context)', () => {
+  it('scopes to the patient and left-joins the appointment for context', async () => {
+    mockExecute.mockResolvedValueOnce(rows([]));
+    await listForPatient(5);
+    const sql = mockExecute.mock.calls[0][0] as string;
+    expect(sql).toMatch(/WHERE p\.patient_id = \?/i);
+    expect(sql).toMatch(/LEFT JOIN appointment/i);
+    expect(mockExecute.mock.calls[0][1]).toEqual([5]);
+  });
+});
+
+describe('listAppointmentsForIssue (FSR3 doctor+patient scope)', () => {
+  it('scopes to the doctor and patient, newest first, parameterised', async () => {
+    mockExecute.mockResolvedValueOnce(rows([]));
+    await listAppointmentsForIssue(2, 1);
+    const sql = mockExecute.mock.calls[0][0] as string;
+    expect(sql).toMatch(/FROM appointment/i);
+    expect(sql).toMatch(/doctor_id = \? AND patient_id = \?/i);
+    expect(mockExecute.mock.calls[0][1]).toEqual([2, 1]);
+  });
+});
+
+describe('listForDoctor (§9.8 doctor view + FSR3 scope)', () => {
+  it('scopes strictly to the doctor\'s own records, joins patient, exposes fulfilment', async () => {
+    mockExecute.mockResolvedValueOnce(rows([]));
+    await listForDoctor(7);
+    const sql = mockExecute.mock.calls[0][0] as string;
+    expect(sql).toMatch(/WHERE p\.doctor_id = \?/i);
+    expect(sql).toMatch(/JOIN patient/i);
+    expect(sql).toMatch(/LEFT JOIN appointment/i);   // appointment context (doctor)
+    expect(sql).toMatch(/fulfilment_status/i);
+    // doctorId comes from the session, passed positionally (FSR2/FSR9)
+    expect(mockExecute.mock.calls[0][1]).toEqual([7]);
+  });
+
+  it('returns issued prescriptions with patient name + fulfilment status', async () => {
+    mockExecute.mockResolvedValueOnce(rows([
+      { id: 1, patient_id: 5, patient_name: 'Test Patient', medication: 'Amoxicillin', fulfilment_status: 'pending' },
+    ]));
+    const list = await listForDoctor(7);
+    expect(list).toHaveLength(1);
+    expect(list[0].patient_name).toBe('Test Patient');
   });
 });
 

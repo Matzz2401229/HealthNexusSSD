@@ -47,6 +47,29 @@ export async function myPatients(req: Request, res: Response, next: NextFunction
   }
 }
 
+// GET /prescriptions/appointments?patientId=  (doctor's appointments with a patient, for the issue picker)
+export async function patientAppointments(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const patientId = Number(req.query.patientId);
+    if (!Number.isInteger(patientId) || patientId <= 0) {
+      res.status(400).json({ error: 'A valid patientId is required.' });
+      return;
+    }
+    res.json(await prescriptions.listAppointmentsForIssue(req.session.user!.id, patientId));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /prescriptions/issued  (doctor's own issued prescriptions + fulfilment status)
+export async function listIssued(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.json(await prescriptions.listForDoctor(req.session.user!.id));
+  } catch (err) {
+    next(err);
+  }
+}
+
 // GET /prescriptions/pharmacy  (pharmacist queue)
 export async function pharmacyQueue(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -98,6 +121,26 @@ export async function download(req: Request, res: Response, next: NextFunction):
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="prescription-${id}.txt"`);
     res.send(renderPrescriptionText(row));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// PATCH /prescriptions/:id/cancel  (doctor cancels their own pending prescription)
+export async function cancel(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const id = parseId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ error: 'Invalid prescription id.' });
+      return;
+    }
+    const ok = await prescriptions.cancelPrescription(id, req.session.user!.id);
+    if (!ok) {
+      // Not theirs, already dispensed/rejected, or already cancelled → 404 (no probing).
+      res.status(404).json({ error: 'Prescription not found or cannot be cancelled.' });
+      return;
+    }
+    res.json({ message: 'Prescription cancelled.' });
   } catch (err) {
     next(err);
   }
