@@ -21,6 +21,7 @@ import {
   getForUser,
   pharmacyQueue,
   listAuthorisedPatients,
+  listAppointmentsForIssue,
   listForDoctor,
   cancelPrescription,
   NotAuthorisedError,
@@ -163,6 +164,17 @@ describe('listAuthorisedPatients (FSR4 scope, FSR2 identity)', () => {
     const patients = await listAuthorisedPatients(7);
     expect(patients).toHaveLength(2);
     expect(patients[0]).toEqual({ id: 1, full_name: 'Test Patient' });
+  });
+});
+
+describe('listAppointmentsForIssue (FSR3 doctor+patient scope)', () => {
+  it('scopes to the doctor and patient, newest first, parameterised', async () => {
+    mockExecute.mockResolvedValueOnce(rows([]));
+    await listAppointmentsForIssue(2, 1);
+    const sql = mockExecute.mock.calls[0][0] as string;
+    expect(sql).toMatch(/FROM appointment/i);
+    expect(sql).toMatch(/doctor_id = \? AND patient_id = \?/i);
+    expect(mockExecute.mock.calls[0][1]).toEqual([2, 1]);
   });
 });
 

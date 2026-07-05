@@ -47,6 +47,20 @@ export async function myPatients(req: Request, res: Response, next: NextFunction
   }
 }
 
+// GET /prescriptions/appointments?patientId=  (doctor's appointments with a patient, for the issue picker)
+export async function patientAppointments(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const patientId = Number(req.query.patientId);
+    if (!Number.isInteger(patientId) || patientId <= 0) {
+      res.status(400).json({ error: 'A valid patientId is required.' });
+      return;
+    }
+    res.json(await prescriptions.listAppointmentsForIssue(req.session.user!.id, patientId));
+  } catch (err) {
+    next(err);
+  }
+}
+
 // GET /prescriptions/issued  (doctor's own issued prescriptions + fulfilment status)
 export async function listIssued(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {

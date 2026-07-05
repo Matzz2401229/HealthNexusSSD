@@ -155,6 +155,32 @@ export async function listAuthorisedPatients(doctorId: number): Promise<Authoris
   );
 }
 
+// --- 5b. A doctor's appointments with a patient (backs the issue picker) --
+export interface IssueAppointment {
+  id: number;
+  scheduled_at: string;
+  status: string;
+}
+
+/**
+ * List the appointments between a doctor and a given patient, so the doctor can
+ * pick which consultation a prescription relates to (FSR4 treatment context).
+ * Scoped by doctor_id (from the session) so a doctor only ever sees their own
+ * appointments — never another doctor's (FSR3). Parameterised (FSR9).
+ */
+export async function listAppointmentsForIssue(
+  doctorId: number,
+  patientId: number,
+): Promise<IssueAppointment[]> {
+  return runQuery<IssueAppointment>(
+    `SELECT id, scheduled_at, status
+       FROM appointment
+      WHERE doctor_id = ? AND patient_id = ?
+      ORDER BY scheduled_at DESC`,
+    [doctorId, patientId],
+  );
+}
+
 // --- 6. A doctor's own issued prescriptions (view + track fulfilment) -----
 export interface DoctorPrescriptionItem {
   id: number;

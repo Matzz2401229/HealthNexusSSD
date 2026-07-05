@@ -10,6 +10,7 @@ jest.mock('../src/services/prescription.service', () => ({
   listForPatient: jest.fn(),
   pharmacyQueue: jest.fn(),
   listAuthorisedPatients: jest.fn(),
+  listAppointmentsForIssue: jest.fn(),
   listForDoctor: jest.fn(),
   getForUser: jest.fn(),
   updateFulfilment: jest.fn(),
@@ -69,6 +70,24 @@ describe('myPatients (GET /prescriptions/patients)', () => {
     expect((res.body as Array<{ id: number }>)[0].id).toBe(1);
     // identity comes from the session, not client input (FSR2)
     expect(svc.listAuthorisedPatients).toHaveBeenCalledWith(2);
+  });
+});
+
+describe('patientAppointments (GET /prescriptions/appointments)', () => {
+  it('returns 400 without a valid patientId', async () => {
+    const req = { session: { user: { id: 2, role: 'doctor' } }, query: {} } as unknown as Request;
+    const res = mockRes();
+    await controller.patientAppointments(req, res, next);
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('returns 200 with the appointments for the session doctor + given patient', async () => {
+    svc.listAppointmentsForIssue.mockResolvedValueOnce([{ id: 1 }] as never);
+    const req = { session: { user: { id: 2, role: 'doctor' } }, query: { patientId: '1' } } as unknown as Request;
+    const res = mockRes();
+    await controller.patientAppointments(req, res, next);
+    expect(res.statusCode).toBe(200);
+    expect(svc.listAppointmentsForIssue).toHaveBeenCalledWith(2, 1);
   });
 });
 
