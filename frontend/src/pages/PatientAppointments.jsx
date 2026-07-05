@@ -39,7 +39,13 @@ export default function PatientAppointments() {
         try {
             setLoading(true);
             const res = await apiFetch('/appointments/patient/history');
-            if (!res.ok) throw new Error('Failed to load appointments.');
+
+            // Extract the actual JSON error from your backend
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || `Server returned ${res.status}`);
+            }
+
             const data = await res.json();
             setAppointments(data.appointments || []);
         } catch (err) {
