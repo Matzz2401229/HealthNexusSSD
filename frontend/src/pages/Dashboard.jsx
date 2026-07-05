@@ -45,6 +45,11 @@ export default function Dashboard() {
           <Link to="/prescriptions" className="hn-btn hn-btn-primary">View my prescriptions →</Link>
         </p>
       )}
+      {user.role === 'doctor' && user.status !== 'pending' && (
+        <p style={{ marginTop: '1.25rem' }}>
+          <Link to="/prescriptions/new" className="hn-btn hn-btn-primary">Issue a prescription →</Link>
+        </p>
+      )}
       {user.role === 'pharmacist' && (
         <p style={{ marginTop: '1.25rem' }}>
           <Link to="/pharmacy" className="hn-btn hn-btn-primary">Go to fulfilment queue →</Link>
