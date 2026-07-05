@@ -57,12 +57,12 @@ export default function PatientAppointments() {
 
     const fetchDoctors = async () => {
         try {
-            const res = await apiFetch('/users/doctors');
-            if (!res.ok) return; // Fail silently for doctors list if endpoint missing
+            const res = await apiFetch('/appointments/patient/available-doctors');
+            if (!res.ok) return;
             const data = await res.json();
             setDoctors(data.doctors || []);
         } catch (err) {
-            console.warn('Doctors API not ready yet.');
+            console.warn('Failed to fetch available doctors.');
         }
     };
 
@@ -113,13 +113,19 @@ export default function PatientAppointments() {
         }
     };
 
+    // get tomorrows date to match the 1 day backend validation
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const minDate = tomorrow.toISOString().split('T')[0];
+
     return (
+        
         <div className="hn-page">
             <span className="hn-badge">Patient Portal</span>
             <h1 style={{ fontSize: '2.4rem', fontWeight: 700, margin: '1rem 0 2rem' }}>
                 My Appointments
             </h1>
-
+            
             {error && (
                 <div style={{ background: 'var(--hn-danger)', color: '#fff', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
                     {error}
@@ -147,8 +153,6 @@ export default function PatientAppointments() {
                                 required
                             >
                                 <option value="" disabled>-- Choose a Doctor --</option>
-                                {/* Fallback mock if doctors list is empty so you can test booking */}
-                                {doctors.length === 0 && <option value="2">Dr. Placeholder (ID: 2)</option>}
                                 {doctors.map(doc => (
                                     <option key={doc.id} value={doc.id}>{doc.full_name}</option>
                                 ))}
@@ -160,6 +164,7 @@ export default function PatientAppointments() {
                                 <label className="hn-label" htmlFor="date">Date</label>
                                 <input
                                     className="hn-input" type="date" id="date"
+                                    min={minDate}
                                     value={bookForm.date}
                                     onChange={(e) => setBookForm({ ...bookForm, date: e.target.value })}
                                     required
@@ -196,7 +201,7 @@ export default function PatientAppointments() {
                                 const dateObj = new Date(appt.scheduled_at);
                                 const isActive = appt.status === 'booked' || appt.status === 'rescheduled';
 
-                                // Lookup doctor name
+                                // lookup doctor name
                                 const doc = doctors.find(d => d.id === appt.doctor_id);
                                 const doctorName = doc ? doc.full_name : `Doctor (ID: ${appt.doctor_id})`;
 
