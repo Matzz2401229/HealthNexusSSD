@@ -73,6 +73,13 @@ export default function Prescriptions() {
                     This prescription was cancelled.
                   </p>
                 )}
+                <div style={{ marginTop: '1rem' }}>
+                  {/* Same-origin GET: the session cookie is sent automatically and
+                      the server checks ownership + audit-logs the download (SR17). */}
+                  <a className="hn-btn hn-btn-outline" href={`/api/prescriptions/${p.id}/download`}>
+                    Download
+                  </a>
+                </div>
               </div>
             );
           })}
