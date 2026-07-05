@@ -1,11 +1,12 @@
 import { Routes, Route, Link } from 'react-router-dom';
 import Navbar from './components/Navbar';
+import ProtectedRoute from './components/ProtectedRoute';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import PatientAppointments from './pages/PatientAppointments';
 import DoctorSchedule from './pages/DoctorSchedule';
-
+import Dashboard from './pages/Dashboard';
 
 /**
  * App shell + routing. The Navbar renders on every page for consistent
@@ -44,8 +45,16 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/patient/appointments" element={<PatientAppointments />} />
-        <Route path="/doctor/schedule" element={<DoctorSchedule />} />
+        <Route path="/patient/appointments" element={<ProtectedRoute> <PatientAppointments /> </ProtectedRoute>} />
+        <Route path="/doctor/schedule" element={<ProtectedRoute> <DoctorSchedule /> </ProtectedRoute>} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/forgot-password" element={<Placeholder title="Forgot password" />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

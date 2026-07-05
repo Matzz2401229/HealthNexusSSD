@@ -1,37 +1,43 @@
-/**
- * Auth routes (D1 §9.1). Validation runs before the controller; login is
- * additionally rate-limited (brute-force defence, layered with nginx).
- */
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { z } from 'zod';
-import { validate } from '../middleware/validation';
 import * as authController from '../controllers/auth.controller';
+import { asyncHandler } from '../utils/asyncHandler';
+import { requireAuth } from '../middleware/auth';
+
+/**
+ * Auth routes — OWNER: IS (Adil). Mounted at /api/auth by app.ts.
+ *
+ * App-level rate limiting is defence-in-depth against brute-force / credential
+ * stuffing (SR6, NFR3, D1 risk #2), complementing nginx rate limits at the edge
+ * and the per-account lockout in the auth service.
+ */
 
 const router = Router();
 
-// Account-level brute-force limit (nginx also rate-limits by IP at the edge).
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5, // lockout threshold from D1 §9.1
+  max: 10, // login attempts per IP per window
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many attempts. Try again later.' },
+  message: { error: 'Too many attempts. Please try again later.' },
 });
 
-const registerSchema = z.object({
-  email: z.string().email().max(255),
-  password: z.string().min(12).max(200),
-  role: z.enum(['patient', 'doctor', 'pharmacist', 'admin']),
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts. Please try again later.' },
 });
 
-const loginSchema = z.object({
-  email: z.string().email().max(255),
-  password: z.string().min(1).max(200),
-});
+// Registration (FR1, FR2, D1 §9.8)
+router.post('/register', registerLimiter, asyncHandler(authController.registerPatient));
+router.post('/register/doctor', registerLimiter, asyncHandler(authController.registerDoctor));
+router.post('/register/pharmacist', registerLimiter, asyncHandler(authController.registerPharmacist));
 
-router.post('/register', validate(registerSchema), authController.register);
-router.post('/login', loginLimiter, validate(loginSchema), authController.login);
-router.post('/logout', authController.logout);
+// Login / logout / session (FR3, SR2, D1 9.1)
+router.post('/login', loginLimiter, asyncHandler(authController.login));
+router.post('/logout', asyncHandler(authController.logout));
+router.get('/me', requireAuth, asyncHandler(authController.me));
 
 export default router;
