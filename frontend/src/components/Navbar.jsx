@@ -21,11 +21,23 @@ export default function Navbar() {
 
   return (
     <nav className="hn-navbar">
+    <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
       <Link to="/" className="hn-brand" style={{ color: 'var(--hn-primary)' }}>
         <Logo />
         <span style={{ color: 'var(--hn-primary-darker)' }}>HealthNexus</span>
       </Link>
 
+        {user && user.role === 'patient' && (
+            <Link
+                to="/patient/appointments"
+                className={`hn-nav-item ${pathname === '/patient/appointments' ? 'active' : ''}`}
+                style={{ textDecoration: 'none', color: 'var(--hn-primary-darker)', fontWeight: '500' }}
+            >
+                Appointments
+            </Link>
+        )}
+    </div>
+    
       <div className="hn-nav-links">
         {user ? (
           <>
