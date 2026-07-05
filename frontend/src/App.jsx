@@ -1,6 +1,6 @@
 import { Routes, Route, Link } from 'react-router-dom';
 import Navbar from './components/Navbar';
-import ProtectedRoute from './components/ProtectedRoute';
+import ProtectedRoute, { RequireAdmin } from './components/ProtectedRoute';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -10,6 +10,7 @@ import PharmacyQueue from './pages/PharmacyQueue';
 import PatientAppointments from './pages/PatientAppointments';
 import DoctorSchedule from './pages/DoctorSchedule';
 import Dashboard from './pages/Dashboard';
+import Admin from './pages/Admin';
 
 /**
  * App shell + routing. The Navbar renders on every page for consistent
@@ -56,6 +57,14 @@ export default function App() {
             <ProtectedRoute>
               <Dashboard />
             </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <RequireAdmin>
+              <Admin />
+            </RequireAdmin>
           }
         />
         <Route path="/forgot-password" element={<Placeholder title="Forgot password" />} />
