@@ -5,11 +5,13 @@
  */
 import { Router } from 'express';
 import authRoutes from './auth.routes';
+import profileRoutes from './profile.routes';
 
 const router = Router();
 
 router.get('/health', (_req, res) => res.json({ status: 'ok' }));
 router.use('/auth', authRoutes);
+router.use('/profile', profileRoutes);
 
 // TODO (workstreams §8):
 // router.use('/appointments', appointmentRoutes);
