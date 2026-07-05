@@ -54,8 +54,22 @@ export default function App() {
           }
         />
         <Route path="/forgot-password" element={<Placeholder title="Forgot password" />} />
-        <Route path="/prescriptions" element={<Prescriptions />} />
-        <Route path="/pharmacy" element={<PharmacyQueue />} />
+        <Route
+          path="/prescriptions"
+          element={
+            <ProtectedRoute role="patient">
+              <Prescriptions />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pharmacy"
+          element={
+            <ProtectedRoute role="pharmacist">
+              <PharmacyQueue />
+            </ProtectedRoute>
+          }
+        />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </>

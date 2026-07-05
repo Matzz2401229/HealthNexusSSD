@@ -3,10 +3,11 @@ import { useAuth } from '../context/AuthContext';
 
 /**
  * Gate for authenticated-only pages. While the initial /auth/me check runs we
- * show nothing; if there's no session we redirect to /login. (This is a UX
- * guard only — the real access control is enforced server-side per request.)
+ * show nothing; if there's no session we redirect to /login. An optional `role`
+ * restricts the page to one role (wrong role → bounced to /dashboard). This is
+ * a UX guard only — the real access control is enforced server-side per request.
  */
-export default function ProtectedRoute({ children }) {
+export default function ProtectedRoute({ children, role }) {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -18,6 +19,9 @@ export default function ProtectedRoute({ children }) {
   }
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+  if (role && user.role !== role) {
+    return <Navigate to="/dashboard" replace />;
   }
   return children;
 }

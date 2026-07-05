@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 /**
@@ -37,6 +37,17 @@ export default function Dashboard() {
       ) : (
         <p className="hn-text-muted">
           Your role dashboard will appear here once those features are built.
+        </p>
+      )}
+
+      {user.role === 'patient' && (
+        <p style={{ marginTop: '1.25rem' }}>
+          <Link to="/prescriptions" className="hn-btn hn-btn-primary">View my prescriptions →</Link>
+        </p>
+      )}
+      {user.role === 'pharmacist' && (
+        <p style={{ marginTop: '1.25rem' }}>
+          <Link to="/pharmacy" className="hn-btn hn-btn-primary">Go to fulfilment queue →</Link>
         </p>
       )}
 
