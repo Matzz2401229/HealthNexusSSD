@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { apiGet } from '../lib/api';
+import { apiGet, apiPatch } from '../lib/api';
 
 /**
  * Doctor "My Prescriptions" page (§9.8 — a doctor may view fulfilment status).
  * Lists the prescriptions this doctor has issued from GET /api/prescriptions/issued,
- * showing which patient each is for and its current fulfilment status.
+ * showing which patient each is for and its current fulfilment status. A doctor
+ * can cancel one that is still pending (PATCH /api/prescriptions/:id/cancel).
  */
 const FULFILMENT_LABEL = {
   pending: { text: 'Pending', color: 'var(--hn-warning)' },
@@ -15,15 +16,34 @@ const FULFILMENT_LABEL = {
 export default function DoctorPrescriptions() {
   const [items, setItems] = useState([]);
   const [state, setState] = useState('loading'); // loading | ready | error
+  const [busyId, setBusyId] = useState(null);
+  const [actionError, setActionError] = useState(null);
 
-  useEffect(() => {
+  function load() {
+    setState('loading');
     apiGet('/prescriptions/issued')
       .then((data) => {
         setItems(data);
         setState('ready');
       })
       .catch(() => setState('error'));
-  }, []);
+  }
+
+  useEffect(load, []);
+
+  async function cancel(id) {
+    if (!window.confirm('Cancel this prescription? This cannot be undone.')) return;
+    setBusyId(id);
+    setActionError(null);
+    try {
+      await apiPatch(`/prescriptions/${id}/cancel`);
+      load(); // reflect the new 'cancelled' status
+    } catch {
+      setActionError('Could not cancel — it may have already been dispensed.');
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <div className="hn-page">
@@ -43,6 +63,10 @@ export default function DoctorPrescriptions() {
         </div>
       )}
 
+      {actionError && (
+        <p style={{ color: 'var(--hn-danger)', fontSize: '0.9rem' }}>{actionError}</p>
+      )}
+
       {state === 'ready' && items.length === 0 && (
         <p className="hn-text-muted">You haven’t issued any prescriptions yet.</p>
       )}
@@ -51,6 +75,7 @@ export default function DoctorPrescriptions() {
         <div style={{ display: 'grid', gap: '1rem', marginTop: '1.5rem' }}>
           {items.map((p) => {
             const f = FULFILMENT_LABEL[p.fulfilment_status] ?? { text: p.fulfilment_status, color: 'var(--hn-muted)' };
+            const cancellable = p.status === 'issued' && p.fulfilment_status === 'pending';
             return (
               <div className="hn-card" key={p.id}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '1rem' }}>
@@ -76,10 +101,20 @@ export default function DoctorPrescriptions() {
                     This prescription was cancelled.
                   </p>
                 )}
-                <div style={{ marginTop: '1rem' }}>
+                <div style={{ marginTop: '1rem', display: 'flex', gap: '0.6rem' }}>
                   <a className="hn-btn hn-btn-outline" href={`/api/prescriptions/${p.id}/download`}>
                     Download
                   </a>
+                  {cancellable && (
+                    <button
+                      className="hn-btn hn-btn-outline"
+                      disabled={busyId === p.id}
+                      onClick={() => cancel(p.id)}
+                      style={{ color: 'var(--hn-danger)', borderColor: 'var(--hn-danger)' }}
+                    >
+                      {busyId === p.id ? 'Cancelling…' : 'Cancel'}
+                    </button>
+                  )}
                 </div>
               </div>
             );
