@@ -44,3 +44,14 @@ export async function apiPost(path, body) {
     }),
   );
 }
+
+export async function apiPatch(path, body) {
+  return parse(
+    await fetch(`${BASE}${path}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+      body: JSON.stringify(body ?? {}),
+    }),
+  );
+}
