@@ -38,7 +38,7 @@ export default function Prescriptions() {
         <div className="hn-card" style={{ borderColor: 'var(--hn-danger)' }}>
           <strong style={{ color: 'var(--hn-danger)' }}>Couldn’t load prescriptions.</strong>
           <p className="hn-text-muted" style={{ margin: '0.5rem 0 0' }}>
-            Is the backend running with a fake-login set? (See the run steps.)
+            Make sure you are signed in as a patient, then refresh.
           </p>
         </div>
       )}

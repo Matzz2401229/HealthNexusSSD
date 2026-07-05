@@ -52,7 +52,7 @@ export default function PharmacyQueue() {
         <div className="hn-card" style={{ borderColor: 'var(--hn-danger)' }}>
           <strong style={{ color: 'var(--hn-danger)' }}>Couldn’t load the queue.</strong>
           <p className="hn-text-muted" style={{ margin: '0.5rem 0 0' }}>
-            Make sure the backend is running as a pharmacist (DEV_FAKE_ROLE=pharmacist).
+            Make sure you are signed in as a pharmacist, then refresh.
           </p>
         </div>
       )}
