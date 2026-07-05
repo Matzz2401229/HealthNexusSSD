@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Prescriptions from './pages/Prescriptions';
 import IssuePrescription from './pages/IssuePrescription';
+import DoctorPrescriptions from './pages/DoctorPrescriptions';
 import PharmacyQueue from './pages/PharmacyQueue';
 import PatientAppointments from './pages/PatientAppointments';
 import DoctorSchedule from './pages/DoctorSchedule';
@@ -81,6 +82,14 @@ export default function App() {
           element={
             <ProtectedRoute role="doctor">
               <IssuePrescription />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/doctor/prescriptions"
+          element={
+            <ProtectedRoute role="doctor">
+              <DoctorPrescriptions />
             </ProtectedRoute>
           }
         />
