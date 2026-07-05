@@ -34,3 +34,4 @@ uploads/
 .vscode/
 *.swp
 Claude_SSD.md
+.claude/

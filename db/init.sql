@@ -88,19 +88,52 @@ CREATE TABLE IF NOT EXISTS diagnosis (
 );
 
 CREATE TABLE IF NOT EXISTS prescription (
-  id           BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
-  patient_id   BIGINT UNSIGNED NOT NULL,
-  doctor_id    BIGINT UNSIGNED NOT NULL,
-  -- medication/dosage/issuer are immutable once issued (enforced in service layer)
-  medication   VARCHAR(255) NOT NULL,
-  dosage       VARCHAR(255) NOT NULL,
-  status       ENUM('issued','fulfilled','cancelled') NOT NULL DEFAULT 'issued',
-  issued_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  fulfilled_by BIGINT UNSIGNED NULL,                   -- pharmacist updates status only
-  FOREIGN KEY (patient_id)   REFERENCES patient(id),
-  FOREIGN KEY (doctor_id)    REFERENCES doctor(id),
-  FOREIGN KEY (fulfilled_by) REFERENCES pharmacist(id)
+  id                BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  -- === Clinical fields: IMMUTABLE once issued (FSR13) ===
+  patient_id        BIGINT UNSIGNED NOT NULL,           -- who it is for
+  doctor_id         BIGINT UNSIGNED NOT NULL,           -- issuing doctor (from session, never request body)
+  appointment_id    BIGINT UNSIGNED NULL,               -- treatment context that authorised it (FSR4)
+  medication        VARCHAR(255) NOT NULL,
+  dosage            VARCHAR(255) NOT NULL,
+  instructions      TEXT NULL,                          -- output-encode on render (FSR11)
+  -- === Doctor-writable lifecycle ===
+  status            ENUM('issued','cancelled') NOT NULL DEFAULT 'issued',
+  -- === Pharmacist-writable ONLY (FSR6) ===
+  fulfilment_status ENUM('pending','dispensed','rejected') NOT NULL DEFAULT 'pending',
+  fulfilled_by      BIGINT UNSIGNED NULL,               -- pharmacist who actioned it
+  fulfilled_at      DATETIME NULL,
+  -- === Timestamps ===
+  issued_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (patient_id)     REFERENCES patient(id),
+  FOREIGN KEY (doctor_id)      REFERENCES doctor(id),
+  FOREIGN KEY (appointment_id) REFERENCES appointment(id),
+  FOREIGN KEY (fulfilled_by)   REFERENCES pharmacist(id)
 );
+
+-- Database-level immutability guard (FSR13): reject any UPDATE that tries to
+-- change a clinical field after issue. This is defence in depth — the service
+-- layer also refuses, but the trigger holds even if app logic is bypassed.
+-- (<=> is MySQL null-safe equality, so nullable columns compare correctly.)
+DELIMITER $$
+CREATE TRIGGER trg_prescription_immutable
+BEFORE UPDATE ON prescription
+FOR EACH ROW
+BEGIN
+  IF NEW.patient_id     <> OLD.patient_id
+     OR NEW.doctor_id   <> OLD.doctor_id
+     OR NOT (NEW.appointment_id <=> OLD.appointment_id)
+     OR NEW.medication  <> OLD.medication
+     OR NEW.dosage      <> OLD.dosage
+     OR NOT (NEW.instructions   <=> OLD.instructions)
+     OR NEW.issued_at   <> OLD.issued_at
+  THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Prescription clinical fields are immutable once issued (FSR13)';
+  END IF;
+END$$
+DELIMITER ;
 
 CREATE TABLE IF NOT EXISTS medical_document (
   id            BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,

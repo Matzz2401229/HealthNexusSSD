@@ -4,6 +4,9 @@ import ProtectedRoute, { RequireAdmin } from './components/ProtectedRoute';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Prescriptions from './pages/Prescriptions';
+import IssuePrescription from './pages/IssuePrescription';
+import PharmacyQueue from './pages/PharmacyQueue';
 import PatientAppointments from './pages/PatientAppointments';
 import DoctorSchedule from './pages/DoctorSchedule';
 import Dashboard from './pages/Dashboard';
@@ -65,6 +68,30 @@ export default function App() {
           }
         />
         <Route path="/forgot-password" element={<Placeholder title="Forgot password" />} />
+        <Route
+          path="/prescriptions"
+          element={
+            <ProtectedRoute role="patient">
+              <Prescriptions />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/prescriptions/new"
+          element={
+            <ProtectedRoute role="doctor">
+              <IssuePrescription />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pharmacy"
+          element={
+            <ProtectedRoute role="pharmacist">
+              <PharmacyQueue />
+            </ProtectedRoute>
+          }
+        />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </>

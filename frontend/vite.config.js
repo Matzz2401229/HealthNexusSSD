@@ -8,6 +8,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        // Don't let the SPA navigation fallback (index.html) swallow backend
+        // requests. Without this, navigating to /api/... (e.g. a prescription
+        // download link) is served the app shell and 404s instead of hitting
+        // the backend. API calls must always go to the network.
+        navigateFallbackDenylist: [/^\/api\//],
+      },
       manifest: {
         name: 'HealthNexus',
         short_name: 'HealthNexus',
