@@ -30,9 +30,10 @@ const registerLimiter = rateLimit({
   message: { error: 'Too many attempts. Please try again later.' },
 });
 
-// Registration (FR1, FR2)
+// Registration (FR1, FR2, D1 §9.8)
 router.post('/register', registerLimiter, asyncHandler(authController.registerPatient));
 router.post('/register/doctor', registerLimiter, asyncHandler(authController.registerDoctor));
+router.post('/register/pharmacist', registerLimiter, asyncHandler(authController.registerPharmacist));
 
 // Login / logout / session (FR3, SR2, D1 9.1)
 router.post('/login', loginLimiter, asyncHandler(authController.login));

@@ -1,24 +1,16 @@
 /**
  * Tiny fetch wrapper for the HealthNexus API.
  * Calls go to /api/* — in dev Vite proxies that to the backend; in production
- * nginx routes it. credentials:'include' sends the session cookie once real
- * auth exists.
+ * nginx routes it. credentials:'include' sends the session cookie (hn.sid).
+ * On a non-2xx response we throw an Error carrying the server's message + status
+ * so pages can show it.
  */
 const BASE = '/api';
 
-export async function apiGet(path) {
-  const res = await fetch(`${BASE}${path}`, { credentials: 'include' });
-  if (!res.ok) {
-    throw new Error(`Request failed (${res.status})`);
-  }
-  return res.json();
-}
-
 /**
  * Anti-CSRF token for state-changing requests (double-submit, FSR12): the
- * server compares this cookie against the x-csrf-token header. We ensure a
- * token exists client-side; once the auth workstream issues server-side
- * tokens, this reads that cookie instead.
+ * server compares this cookie against the x-csrf-token header. We provision one
+ * client-side; SameSite=Strict is what actually blocks cross-site requests.
  */
 function getCsrfToken() {
   const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
@@ -28,18 +20,38 @@ function getCsrfToken() {
   return token;
 }
 
-export async function apiPatch(path, body) {
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-csrf-token': getCsrfToken(),
-    },
-    body: JSON.stringify(body),
-  });
+async function parse(res) {
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(`Request failed (${res.status})`);
+    const err = new Error(data.error || `Request failed (${res.status})`);
+    err.status = res.status;
+    throw err;
   }
-  return res.json();
+  return data;
+}
+
+export async function apiGet(path) {
+  return parse(await fetch(`${BASE}${path}`, { credentials: 'include' }));
+}
+
+export async function apiPost(path, body) {
+  return parse(
+    await fetch(`${BASE}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+      body: JSON.stringify(body ?? {}),
+    }),
+  );
+}
+
+export async function apiPatch(path, body) {
+  return parse(
+    await fetch(`${BASE}${path}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+      body: JSON.stringify(body ?? {}),
+    }),
+  );
 }

@@ -19,13 +19,12 @@ export default defineConfig({
   server: {
     host: true,
     port: 3000,
-    // Dev only: forward /api calls to the local backend so the browser sees
-    // one origin (no CORS). In production nginx does this routing instead.
+    // Dev only: forward /api calls to the local backend (no CORS). In production
+    // nginx does this routing. Strips /api since the backend serves /auth etc.
     proxy: {
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,
-        // backend serves /prescriptions (no /api prefix); strip it like nginx does
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },

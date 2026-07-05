@@ -1,10 +1,12 @@
 import { Routes, Route, Link } from 'react-router-dom';
 import Navbar from './components/Navbar';
+import ProtectedRoute from './components/ProtectedRoute';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Prescriptions from './pages/Prescriptions';
 import PharmacyQueue from './pages/PharmacyQueue';
+import Dashboard from './pages/Dashboard';
 
 /**
  * App shell + routing. The Navbar renders on every page for consistent
@@ -43,6 +45,14 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/forgot-password" element={<Placeholder title="Forgot password" />} />
         <Route path="/prescriptions" element={<Prescriptions />} />
         <Route path="/pharmacy" element={<PharmacyQueue />} />
