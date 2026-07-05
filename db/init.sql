@@ -105,23 +105,39 @@ CREATE TABLE IF NOT EXISTS medical_document (
   id            BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   patient_id    BIGINT UNSIGNED NOT NULL,
   uploaded_by   BIGINT UNSIGNED NOT NULL,
-  stored_name   VARCHAR(255) NOT NULL,                 -- random UUID name, stored outside web root
+  stored_name   VARCHAR(255) NOT NULL UNIQUE,          -- random UUID name, stored outside web root
   original_name VARCHAR(255) NOT NULL,
   mime_type     VARCHAR(100) NOT NULL,                 -- verified via magic bytes, not client header
   size_bytes    INT UNSIGNED NOT NULL,
+  sha256        CHAR(64) NULL,
+  category      ENUM('lab','imaging','prescription','referral','general') NOT NULL DEFAULT 'general',
+  description   VARCHAR(500) NULL,
+  status        ENUM('active','deleted','quarantined') NOT NULL DEFAULT 'active',
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_medical_document_patient (patient_id),
+  INDEX idx_medical_document_uploaded_by (uploaded_by),
   FOREIGN KEY (patient_id)  REFERENCES patient(id),
   FOREIGN KEY (uploaded_by) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS document_request (
-  id          BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
-  document_id BIGINT UNSIGNED NOT NULL,
-  requester_id BIGINT UNSIGNED NOT NULL,
-  status      ENUM('pending','approved','denied') NOT NULL DEFAULT 'pending',
-  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id             BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  document_id    BIGINT UNSIGNED NOT NULL,
+  requester_id   BIGINT UNSIGNED NOT NULL,
+  requested_role VARCHAR(32) NULL,
+  reason         VARCHAR(500) NULL,
+  status         ENUM('pending','approved','denied','revoked') NOT NULL DEFAULT 'pending',
+  reviewed_by    BIGINT UNSIGNED NULL,
+  reviewed_at    DATETIME NULL,
+  created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_document_request_document (document_id),
+  INDEX idx_document_request_requester (requester_id),
+  INDEX idx_document_request_status (status),
   FOREIGN KEY (document_id)  REFERENCES medical_document(id),
-  FOREIGN KEY (requester_id) REFERENCES users(id)
+  FOREIGN KEY (requester_id) REFERENCES users(id),
+  FOREIGN KEY (reviewed_by) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS announcement (

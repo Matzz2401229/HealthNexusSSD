@@ -30,6 +30,12 @@ declare global {
  * Generic 401 message — no detail that aids enumeration.
  */
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  // Local development helpers (e.g. devAuth middleware) may pre-populate req.user.
+  if (req.user) {
+    next();
+    return;
+  }
+
   // TODO: look up session from the Secure/HttpOnly/SameSite cookie, validate
   // it against the server-side session store, enforce idle (15m) + absolute
   // (8h) timeouts, then attach req.user.
