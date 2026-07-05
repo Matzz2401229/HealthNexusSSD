@@ -63,6 +63,7 @@ export default function IssuePrescription() {
 
   return (
     <div className="hn-page">
+      <div style={{ maxWidth: '640px', margin: '0 auto' }}>
       <span className="hn-badge">Doctor</span>
       <h1 style={{ margin: '1rem 0 0.25rem' }}>Issue prescription</h1>
       <p className="hn-text-muted" style={{ marginTop: 0 }}>
@@ -91,7 +92,7 @@ export default function IssuePrescription() {
       )}
 
       {state === 'ready' && patients.length > 0 && (
-        <div className="hn-card" style={{ marginTop: '1.5rem', maxWidth: '560px' }}>
+        <div className="hn-card" style={{ marginTop: '1.5rem' }}>
           {success && (
             <div className="hn-card" style={{ borderColor: 'var(--hn-success)', marginBottom: '1rem' }}>
               <strong style={{ color: 'var(--hn-success)' }}>✓ {success}</strong>
@@ -177,6 +178,7 @@ export default function IssuePrescription() {
           </form>
         </div>
       )}
+      </div>
     </div>
   );
 }
