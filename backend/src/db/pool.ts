@@ -13,13 +13,15 @@ export const pool = mysql.createPool({
   multipleStatements: false,
 });
 
-export async function query<T = any>(
+export async function query<T = unknown>(
   sql: string,
-  values?: Record<string, any>,
+  values?: Record<string, unknown>,
 ): Promise<T[]> {
   const conn = await pool.getConnection();
   try {
-    const [rows] = await conn.execute(sql, values);
+    // mysql2's execute() overloads don't model the named-placeholder object
+    // form in their types, so cast the values through.
+    const [rows] = await conn.execute(sql, values as never);
     return rows as T[];
   } finally {
     conn.release();

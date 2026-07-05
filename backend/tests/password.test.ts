@@ -11,21 +11,21 @@ describe('validatePasswordPolicy', () => {
 
   it('rejects passwords shorter than 12 chars', () => {
     const result = validatePasswordPolicy('Ab1!short');
-    expect(result).toContain('at least 12');
+    expect(result).toEqual(expect.arrayContaining([expect.stringContaining('at least 12')]));
   });
 
   it('requires an uppercase letter', () => {
     const result = validatePasswordPolicy('str0ng!passw0rd');
-    expect(result).toContain('uppercase');
+    expect(result).toEqual(expect.arrayContaining([expect.stringContaining('uppercase')]));
   });
 
   it('requires a digit', () => {
     const result = validatePasswordPolicy('Strong!Password');
-    expect(result).toContain('digit');
+    expect(result).toEqual(expect.arrayContaining([expect.stringContaining('digit')]));
   });
 
   it('requires a special character', () => {
     const result = validatePasswordPolicy('Str0ngPassw0rd');
-    expect(result).toContain('special');
+    expect(result).toEqual(expect.arrayContaining([expect.stringContaining('special')]));
   });
 });

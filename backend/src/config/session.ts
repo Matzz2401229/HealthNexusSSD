@@ -1,10 +1,12 @@
 import session from 'express-session';
+// express-mysql-session ships no type declarations; the ambient .d.ts covers
+// tsc, but ts-node-dev needs this suppression at runtime.
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import expressMySQLSession from 'express-mysql-session';
 import { env } from './env';
 
 const MySQLStore = expressMySQLSession(session);
-// @ts-ignore - express-mysql-session has incomplete types
 
 const store = new MySQLStore({
   host: env.db.host,

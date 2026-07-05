@@ -1,5 +1,4 @@
 import 'express-session';
-import { SessionUser } from '../types/session';
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { AppError } from '../utils/AppError';
@@ -57,7 +56,7 @@ export async function registerPatient(req: Request, res: Response): Promise<void
     throw new AppError(400, policyErrors.join(' '));
   }
 
-  await authService.registerPatient(parsed.data as any);
+  await authService.registerPatient(parsed.data as authService.RegisterPatientInput);
   res.status(201).json({ message: 'Registration successful. You can now log in.' });
 }
 
@@ -73,7 +72,7 @@ export async function registerDoctor(req: Request, res: Response): Promise<void>
     throw new AppError(400, policyErrors.join(' '));
   }
 
-  await authService.registerDoctor(parsed.data as any);
+  await authService.registerDoctor(parsed.data as authService.RegisterDoctorInput);
   res.status(201).json({
     message: 'Doctor registration submitted. Your account is pending admin approval.',
   });
