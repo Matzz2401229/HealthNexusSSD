@@ -18,6 +18,7 @@ import { pool } from '../src/db/pool';
 import {
   issuePrescription,
   updateFulfilment,
+  listForPatient,
   getForUser,
   pharmacyQueue,
   listAuthorisedPatients,
@@ -167,6 +168,17 @@ describe('listAuthorisedPatients (FSR4 scope, FSR2 identity)', () => {
   });
 });
 
+describe('listForPatient (FSR3 own records + appointment context)', () => {
+  it('scopes to the patient and left-joins the appointment for context', async () => {
+    mockExecute.mockResolvedValueOnce(rows([]));
+    await listForPatient(5);
+    const sql = mockExecute.mock.calls[0][0] as string;
+    expect(sql).toMatch(/WHERE p\.patient_id = \?/i);
+    expect(sql).toMatch(/LEFT JOIN appointment/i);
+    expect(mockExecute.mock.calls[0][1]).toEqual([5]);
+  });
+});
+
 describe('listAppointmentsForIssue (FSR3 doctor+patient scope)', () => {
   it('scopes to the doctor and patient, newest first, parameterised', async () => {
     mockExecute.mockResolvedValueOnce(rows([]));
@@ -185,6 +197,7 @@ describe('listForDoctor (§9.8 doctor view + FSR3 scope)', () => {
     const sql = mockExecute.mock.calls[0][0] as string;
     expect(sql).toMatch(/WHERE p\.doctor_id = \?/i);
     expect(sql).toMatch(/JOIN patient/i);
+    expect(sql).toMatch(/LEFT JOIN appointment/i);   // appointment context (doctor)
     expect(sql).toMatch(/fulfilment_status/i);
     // doctorId comes from the session, passed positionally (FSR2/FSR9)
     expect(mockExecute.mock.calls[0][1]).toEqual([7]);

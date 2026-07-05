@@ -31,6 +31,7 @@ export interface Prescription {
   fulfilled_by: number | null;
   fulfilled_at: string | null;
   issued_at: string;
+  appointment_at?: string | null; // scheduled_at of the linked appointment, when joined
 }
 
 export interface IssueInput {
@@ -86,8 +87,14 @@ export async function issuePrescription(doctorId: number, input: IssueInput): Pr
 // --- 2. List a patient's own prescriptions --------------------------------
 export async function listForPatient(patientId: number): Promise<Prescription[]> {
   // patientId is the session user's id, not a URL parameter → no IDOR (FSR3).
+  // LEFT JOIN the appointment so the patient can see which consultation each
+  // prescription relates to (appointment_at is null for older/unlinked records).
   return runQuery<Prescription>(
-    `SELECT * FROM prescription WHERE patient_id = ? ORDER BY issued_at DESC`,
+    `SELECT p.*, a.scheduled_at AS appointment_at
+       FROM prescription p
+       LEFT JOIN appointment a ON a.id = p.appointment_id
+      WHERE p.patient_id = ?
+      ORDER BY p.issued_at DESC`,
     [patientId],
   );
 }
@@ -193,6 +200,7 @@ export interface DoctorPrescriptionItem {
   fulfilment_status: FulfilmentStatus;
   issued_at: string;
   fulfilled_at: string | null;
+  appointment_at: string | null;
 }
 
 /**
@@ -205,9 +213,11 @@ export async function listForDoctor(doctorId: number): Promise<DoctorPrescriptio
   return runQuery<DoctorPrescriptionItem>(
     `SELECT p.id, p.patient_id, pt.full_name AS patient_name,
             p.medication, p.dosage, p.instructions,
-            p.status, p.fulfilment_status, p.issued_at, p.fulfilled_at
+            p.status, p.fulfilment_status, p.issued_at, p.fulfilled_at,
+            a.scheduled_at AS appointment_at
        FROM prescription p
        JOIN patient pt ON pt.id = p.patient_id
+       LEFT JOIN appointment a ON a.id = p.appointment_id
       WHERE p.doctor_id = ?
       ORDER BY p.issued_at DESC`,
     [doctorId],
