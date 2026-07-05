@@ -32,6 +32,13 @@ export interface RegisterDoctorInput {
   specialty?: string; // Option A: team schema uses specialty, not licence number
 }
 
+export interface RegisterPharmacistInput {
+  name: string;
+  email: string;
+  password: string;
+  pharmacy?: string; // matches the pharmacist table's `pharmacy` column
+}
+
 interface UserAuthRow extends RowDataPacket {
   id: number;
   password_hash: string;
@@ -103,6 +110,44 @@ export async function registerDoctor(
     await conn.execute<ResultSetHeader>(
       `INSERT INTO doctor (id, full_name, specialty) VALUES (?, ?, ?)`,
       [userId, input.name, input.specialty ?? null],
+    );
+
+    await conn.commit();
+    return { id: userId };
+  } catch (err) {
+    await conn.rollback();
+    throw translateInsertError(err);
+  } finally {
+    conn.release();
+  }
+}
+
+/**
+ * Register a pharmacist (SR3, D1 §9.8): like a doctor, the users row is created
+ * INACTIVE (is_active = FALSE) — no privileges until an admin approves — plus a
+ * pharmacist profile row, all in one transaction. The Data Control Matrix lists
+ * "Approve / Reject pharmacist accounts" as an admin function.
+ */
+export async function registerPharmacist(
+  input: RegisterPharmacistInput,
+): Promise<{ id: number }> {
+  const email = normaliseEmail(input.email);
+  const passwordHash = await hashPassword(input.password);
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [userResult] = await conn.execute<ResultSetHeader>(
+      `INSERT INTO users (email, password_hash, role, is_active)
+       VALUES (?, ?, 'pharmacist', FALSE)`,
+      [email, passwordHash],
+    );
+    const userId = userResult.insertId;
+
+    await conn.execute<ResultSetHeader>(
+      `INSERT INTO pharmacist (id, full_name, pharmacy) VALUES (?, ?, ?)`,
+      [userId, input.name, input.pharmacy ?? null],
     );
 
     await conn.commit();

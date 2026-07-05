@@ -18,12 +18,10 @@ const app = express();
 // Trust the nginx reverse proxy so req.ip / secure cookies work correctly.
 app.set('trust proxy', 1);
 
+app.use(securityHeaders);
 app.use(cookieParser());
 app.use(sessionMiddleware);
-app.use(csrfProtection);
-app.use(securityHeaders);
 app.use(express.json({ limit: '1mb' }));
-app.use(cookieParser());
 app.use(csrfProtection);
 
 app.use('/', routes);
