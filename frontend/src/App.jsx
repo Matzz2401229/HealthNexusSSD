@@ -7,6 +7,8 @@ import Register from './pages/Register';
 import Prescriptions from './pages/Prescriptions';
 import IssuePrescription from './pages/IssuePrescription';
 import PharmacyQueue from './pages/PharmacyQueue';
+import PatientAppointments from './pages/PatientAppointments';
+import DoctorSchedule from './pages/DoctorSchedule';
 import Dashboard from './pages/Dashboard';
 
 /**
@@ -46,6 +48,8 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/patient/appointments" element={<ProtectedRoute> <PatientAppointments /> </ProtectedRoute>} />
+        <Route path="/doctor/schedule" element={<ProtectedRoute> <DoctorSchedule /> </ProtectedRoute>} />
         <Route
           path="/dashboard"
           element={
