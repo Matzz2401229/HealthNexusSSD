@@ -123,7 +123,7 @@ describe('login', () => {
 
     const res = await login('p@x.com', 'pw');
 
-    expect(res).toEqual({ id: 1, role: 'patient', status: 'active' });
+    expect(res).toEqual({ id: 1, role: 'patient', status: 'active', loginAt: expect.any(Number) });
   });
 
   it('maps an inactive account to status "pending"', async () => {
