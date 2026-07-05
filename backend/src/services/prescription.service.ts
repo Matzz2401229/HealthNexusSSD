@@ -214,6 +214,34 @@ export async function updateFulfilment(
   return updated;
 }
 
+// --- 8. Cancel a prescription (doctor, own + still-pending only) -----------
+export async function cancelPrescription(
+  prescriptionId: number,
+  doctorId: number,
+): Promise<boolean> {
+  // Only the issuing doctor may cancel, and only while the prescription is
+  // still issued + pending — you cannot cancel one a pharmacist has already
+  // dispensed or rejected. The doctor_id in the WHERE clause enforces ownership
+  // (IDOR-safe, FSR3). Changing `status` is permitted by the immutability
+  // trigger; the clinical fields stay locked (FSR13).
+  const result = await runWrite(
+    `UPDATE prescription
+        SET status = 'cancelled'
+      WHERE id = ? AND doctor_id = ? AND status = 'issued' AND fulfilment_status = 'pending'`,
+    [prescriptionId, doctorId],
+  );
+
+  const cancelled = result.affectedRows === 1;
+  await recordAudit({
+    userId: doctorId,
+    role: 'doctor',
+    action: 'prescription.cancel',
+    target: `prescription:${prescriptionId}`,
+    result: cancelled ? 'success' : 'failure',
+  });
+  return cancelled;
+}
+
 // --- helpers --------------------------------------------------------------
 
 /** Run a SELECT and return the rows. */

@@ -38,6 +38,7 @@ router.post('/', requireRole('doctor'), validate(issueSchema), controller.issue)
 
 router.get('/:id', controller.getOne);
 router.get('/:id/download', controller.download);
+router.patch('/:id/cancel', requireRole('doctor'), controller.cancel);
 router.patch('/:id/fulfilment', requireRole('pharmacist'), validate(fulfilmentSchema), controller.updateFulfilment);
 
 export default router;

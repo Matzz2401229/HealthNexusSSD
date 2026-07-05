@@ -22,6 +22,7 @@ import {
   pharmacyQueue,
   listAuthorisedPatients,
   listForDoctor,
+  cancelPrescription,
   NotAuthorisedError,
 } from '../src/services/prescription.service';
 
@@ -82,6 +83,26 @@ describe('updateFulfilment (FSR6 / FSR13 pharmacist)', () => {
   it('returns false when the prescription was already actioned', async () => {
     mockExecute.mockResolvedValueOnce(write({ affectedRows: 0 }));
     expect(await updateFulfilment(5, 9, 'dispensed')).toBe(false);
+  });
+});
+
+describe('cancelPrescription (doctor, own + still-pending only)', () => {
+  it('cancels via status only, scoped to own + pending (never touches clinical fields)', async () => {
+    mockExecute.mockResolvedValueOnce(write({ affectedRows: 1 }));
+    const ok = await cancelPrescription(9, 2);
+    expect(ok).toBe(true);
+    const sql = mockExecute.mock.calls[0][0] as string;
+    expect(sql).toMatch(/SET status = 'cancelled'/i);
+    expect(sql).toMatch(/doctor_id = \?/i);              // ownership guard (FSR3)
+    expect(sql).toMatch(/fulfilment_status = 'pending'/i); // can't cancel a dispensed one
+    expect(sql).not.toMatch(/medication|dosage/i);       // clinical fields untouched (FSR13)
+    // params: [prescriptionId, doctorId]
+    expect(mockExecute.mock.calls[0][1]).toEqual([9, 2]);
+  });
+
+  it('returns false when nothing matched (not owner / already dispensed / already cancelled)', async () => {
+    mockExecute.mockResolvedValueOnce(write({ affectedRows: 0 }));
+    expect(await cancelPrescription(9, 2)).toBe(false);
   });
 });
 

@@ -13,6 +13,7 @@ jest.mock('../src/services/prescription.service', () => ({
   listForDoctor: jest.fn(),
   getForUser: jest.fn(),
   updateFulfilment: jest.fn(),
+  cancelPrescription: jest.fn(),
   NotAuthorisedError: class NotAuthorisedError extends Error {},
 }));
 jest.mock('../src/services/audit.service', () => ({
@@ -158,6 +159,32 @@ describe('getOne (GET /prescriptions/:id)', () => {
     const res = mockRes();
     await controller.getOne(req, res, next);
     expect(res.statusCode).toBe(200);
+  });
+});
+
+describe('cancel (PATCH /prescriptions/:id/cancel)', () => {
+  const req = { session: { user: { id: 2, role: 'doctor' } }, params: { id: '9' } } as unknown as Request;
+
+  it('returns 200 when the cancel succeeds (calls service with id + session doctor id)', async () => {
+    svc.cancelPrescription.mockResolvedValueOnce(true);
+    const res = mockRes();
+    await controller.cancel(req, res, next);
+    expect(res.statusCode).toBe(200);
+    expect(svc.cancelPrescription).toHaveBeenCalledWith(9, 2);
+  });
+
+  it('returns 404 when not cancellable / not the owner', async () => {
+    svc.cancelPrescription.mockResolvedValueOnce(false);
+    const res = mockRes();
+    await controller.cancel(req, res, next);
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('returns 400 for a non-numeric id', async () => {
+    const badReq = { session: { user: { id: 2, role: 'doctor' } }, params: { id: 'x' } } as unknown as Request;
+    const res = mockRes();
+    await controller.cancel(badReq, res, next);
+    expect(res.statusCode).toBe(400);
   });
 });
 

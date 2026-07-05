@@ -112,6 +112,26 @@ export async function download(req: Request, res: Response, next: NextFunction):
   }
 }
 
+// PATCH /prescriptions/:id/cancel  (doctor cancels their own pending prescription)
+export async function cancel(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const id = parseId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ error: 'Invalid prescription id.' });
+      return;
+    }
+    const ok = await prescriptions.cancelPrescription(id, req.session.user!.id);
+    if (!ok) {
+      // Not theirs, already dispensed/rejected, or already cancelled → 404 (no probing).
+      res.status(404).json({ error: 'Prescription not found or cannot be cancelled.' });
+      return;
+    }
+    res.json({ message: 'Prescription cancelled.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // PATCH /prescriptions/:id/fulfilment  (pharmacist updates status only)
 export async function updateFulfilment(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
