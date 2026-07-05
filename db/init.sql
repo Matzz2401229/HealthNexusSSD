@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash  VARCHAR(255) NOT NULL,               -- bcrypt/argon2 only; never plaintext
   role           ENUM('patient','doctor','pharmacist','admin') NOT NULL,
   is_active      BOOLEAN NOT NULL DEFAULT FALSE,       -- doctors inactive until admin approval
+  approval_status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
   email_verified BOOLEAN NOT NULL DEFAULT FALSE,
   failed_logins  INT NOT NULL DEFAULT 0,
   locked_until   DATETIME NULL,
