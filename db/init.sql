@@ -181,10 +181,21 @@ CREATE TABLE IF NOT EXISTS auditlog (
   -- NB: never store passwords, tokens, or clinical content here.
 );
 
+-- --- Session store (express-mysql-session) --------------------------
+CREATE TABLE IF NOT EXISTS sessions (
+  session_id VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
+  expires    INT UNSIGNED NOT NULL,
+  data       MEDIUMTEXT COLLATE utf8mb4_bin,
+  PRIMARY KEY (session_id)
+) ENGINE=InnoDB;
+
 -- =====================================================================
 -- Restricted application DB user (D1 §9.6): SELECT/INSERT/UPDATE only.
--- No DROP/CREATE/DELETE/admin. Password comes from the environment.
+-- No DROP/CREATE/admin. Password comes from the environment.
+-- DELETE is granted ONLY on `sessions` (needed for logout + expiry),
+-- never on clinical tables.
 -- =====================================================================
 CREATE USER IF NOT EXISTS 'healthnexus_app'@'%' IDENTIFIED BY 'change_me_app_password';
 GRANT SELECT, INSERT, UPDATE ON healthnexus.* TO 'healthnexus_app'@'%';
+GRANT DELETE ON healthnexus.sessions TO 'healthnexus_app'@'%';
 FLUSH PRIVILEGES;

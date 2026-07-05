@@ -29,7 +29,7 @@ describe('requireRole', () => {
   });
 
   it('403s when the role is not allowed', () => {
-    const req = { user: { id: 1, role: 'patient' } } as Request;
+    const req = { user: { id: 1, role: 'patient' } } as unknown as Request;
     const res = mockRes();
     const next = jest.fn();
     requireRole('admin')(req, res, next);
@@ -38,7 +38,7 @@ describe('requireRole', () => {
   });
 
   it('calls next() when the role is allowed', () => {
-    const req = { user: { id: 1, role: 'admin' } } as Request;
+    const req = { user: { id: 1, role: 'admin' } } as unknown as Request;
     const res = mockRes();
     const next = jest.fn();
     requireRole('admin', 'doctor')(req, res, next);

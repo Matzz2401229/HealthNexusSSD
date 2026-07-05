@@ -8,5 +8,8 @@ module.exports = {
   // Aim for 80% coverage on security-critical paths (auth, authz, validation).
   coverageThreshold: {
     global: { branches: 50, functions: 50, lines: 50, statements: 50 }
+  },
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1'
   }
 };
