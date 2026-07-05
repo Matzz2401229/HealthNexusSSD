@@ -4,7 +4,7 @@ import { recordAudit } from '../services/audit.service';
 
 export async function bookAppointment(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-        const patientId = req.user!.id;
+        const patientId = (req as any).user?.id;
         const { doctorId, scheduledAt } = req.body;
 
         const appointmentId = await appointmentService.bookAppointment(patientId, doctorId, new Date(scheduledAt));
@@ -12,7 +12,7 @@ export async function bookAppointment(req: Request, res: Response, next: NextFun
         // log critical action
         await recordAudit({
             userId: patientId,
-            role: req.user!.role,
+            role: (req as any).user?.role,
             action: 'appointment.book',
             target: `appointmentId:${appointmentId}`,
             ip: req.ip,
@@ -27,7 +27,7 @@ export async function bookAppointment(req: Request, res: Response, next: NextFun
 
 export async function cancelAppointment(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-        const patientId = req.user!.id;
+        const patientId =(req as any).user?.id;
         const appointmentId = Number(req.params.id);
 
         const success = await appointmentService.cancelAppointment(appointmentId, patientId);
@@ -35,7 +35,7 @@ export async function cancelAppointment(req: Request, res: Response, next: NextF
         // log critical action
         await recordAudit({
             userId: patientId,
-            role: req.user!.role,
+            role: (req as any).user?.role,
             action: 'appointment.cancel',
             target: `appointmentId:${appointmentId}`,
             ip: req.ip,
@@ -55,7 +55,7 @@ export async function cancelAppointment(req: Request, res: Response, next: NextF
 
 export async function rescheduleAppointment(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-        const patientId = req.user!.id;
+        const patientId = (req as any).user?.id;
         const appointmentId = Number(req.params.id);
         const { scheduledAt } = req.body;
 
@@ -64,7 +64,7 @@ export async function rescheduleAppointment(req: Request, res: Response, next: N
         // log critical action
         await recordAudit({
             userId: patientId,
-            role: req.user!.role,
+            role: (req as any).user?.role,
             action: 'appointment.reschedule',
             target: `appointmentId:${appointmentId}`,
             ip: req.ip,
@@ -84,7 +84,7 @@ export async function rescheduleAppointment(req: Request, res: Response, next: N
 
 export async function getPatientAppointments(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-        const patientId = req.user!.id;
+        const patientId = (req as any).user?.id;
         const appointments = await appointmentService.getPatientAppointments(patientId);
         res.json({ appointments });
     } catch (err) {
@@ -94,7 +94,7 @@ export async function getPatientAppointments(req: Request, res: Response, next: 
 
 export async function getPatientDiagnosis(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-        const patientId = req.user!.id;
+        const patientId = (req as any).user?.id;
         const appointmentId = Number(req.params.id);
 
         const diagnosis = await appointmentService.getPatientDiagnosis(appointmentId, patientId);
@@ -102,7 +102,7 @@ export async function getPatientDiagnosis(req: Request, res: Response, next: Nex
         // log protected health information access event
         await recordAudit({
             userId: patientId,
-            role: req.user!.role,
+            role: (req as any).user?.role,
             action: 'diagnosis.view',
             target: `appointmentId:${appointmentId}`,
             ip: req.ip,
@@ -117,7 +117,7 @@ export async function getPatientDiagnosis(req: Request, res: Response, next: Nex
 
 export async function getDoctorSchedule(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-        const doctorId = req.user!.id;
+        const doctorId = (req as any).user?.id;
         const appointments = await appointmentService.getDoctorSchedule(doctorId);
         res.json({ appointments });
     } catch (err) {
@@ -127,7 +127,7 @@ export async function getDoctorSchedule(req: Request, res: Response, next: NextF
 
 export async function updateAppointmentStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-        const doctorId = req.user!.id;
+        const doctorId = (req as any).user?.id;
         const appointmentId = Number(req.params.id);
         const { status } = req.body;
 
@@ -136,7 +136,7 @@ export async function updateAppointmentStatus(req: Request, res: Response, next:
         // log critical action
         await recordAudit({
             userId: doctorId,
-            role: req.user!.role,
+            role: (req as any).user?.role,
             action: 'appointment.update_status',
             target: `appointmentId:${appointmentId}`,
             ip: req.ip,
@@ -156,7 +156,7 @@ export async function updateAppointmentStatus(req: Request, res: Response, next:
 
 export async function recordDiagnosis(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-        const doctorId = req.user!.id;
+        const doctorId = (req as any).user?.id;
         const appointmentId = Number(req.params.id);
         const { remarks } = req.body;
 
@@ -165,7 +165,7 @@ export async function recordDiagnosis(req: Request, res: Response, next: NextFun
         // log clinical record creation
         await recordAudit({
             userId: doctorId,
-            role: req.user!.role,
+            role: (req as any).user?.role,
             action: 'diagnosis.record',
             target: `appointmentId:${appointmentId}`,
             ip: req.ip,
