@@ -27,6 +27,8 @@ export default function Navbar() {
         <span style={{ color: 'var(--hn-primary-darker)' }}>HealthNexus</span>
       </Link>
 
+
+        {/* patient appointment */}
         {user && user.role === 'patient' && (
             <Link
                 to="/patient/appointments"
@@ -34,6 +36,17 @@ export default function Navbar() {
                 style={{ textDecoration: 'none', color: 'var(--hn-primary-darker)', fontWeight: '500' }}
             >
                 Appointments
+            </Link>
+        )}
+        
+        {/* doctor schedule */}
+        {user && user.role === 'doctor' && user.status === 'active' && (
+            <Link
+                to="/doctor/schedule"
+                className={`hn-nav-item ${pathname === '/doctor/schedule' ? 'active' : ''}`}
+                style={{ textDecoration: 'none', color: 'var(--hn-primary-darker)', fontWeight: '500' }}
+            >
+                Schedule
             </Link>
         )}
     </div>
