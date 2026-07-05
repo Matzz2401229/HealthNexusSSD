@@ -35,6 +35,10 @@ const registerDoctorSchema = registerPatientSchema.omit({ dateOfBirth: true }).e
   specialty: z.string().trim().max(255).optional(),
 });
 
+const registerPharmacistSchema = registerPatientSchema.omit({ dateOfBirth: true }).extend({
+  pharmacy: z.string().trim().max(255).optional(),
+});
+
 const loginSchema = z.object({
   email: emailField,
   password: z.string().min(1).max(128),
@@ -75,6 +79,24 @@ export async function registerDoctor(req: Request, res: Response): Promise<void>
   await authService.registerDoctor(parsed.data as authService.RegisterDoctorInput);
   res.status(201).json({
     message: 'Doctor registration submitted. Your account is pending admin approval.',
+  });
+}
+
+/** POST /api/auth/register/pharmacist  (pharmacist self-registration, pending admin approval — D1 §9.8) */
+export async function registerPharmacist(req: Request, res: Response): Promise<void> {
+  const parsed = registerPharmacistSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new AppError(400, firstZodMessage(parsed.error));
+  }
+
+  const policyErrors = validatePasswordPolicy(parsed.data.password);
+  if (policyErrors.length > 0) {
+    throw new AppError(400, policyErrors.join(' '));
+  }
+
+  await authService.registerPharmacist(parsed.data as authService.RegisterPharmacistInput);
+  res.status(201).json({
+    message: 'Pharmacist registration submitted. Your account is pending admin approval.',
   });
 }
 
