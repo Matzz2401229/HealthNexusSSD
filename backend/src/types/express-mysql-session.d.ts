@@ -13,7 +13,7 @@ declare module 'express-mysql-session' {
     expiration?: number;
   }
 
-  function MySQLStore(session: any): new (options: MySQLStoreOptions) => Store;
+  function MySQLStore(session: unknown): new (options: MySQLStoreOptions) => Store;
 
   export = MySQLStore;
 }
