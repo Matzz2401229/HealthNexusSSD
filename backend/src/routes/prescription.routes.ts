@@ -32,6 +32,7 @@ router.use(requireAuth);
 router.get('/mine', requireRole('patient'), controller.listMine);
 router.get('/pharmacy', requireRole('pharmacist'), controller.pharmacyQueue);
 router.get('/patients', requireRole('doctor'), controller.myPatients);
+router.get('/issued', requireRole('doctor'), controller.listIssued);
 
 router.post('/', requireRole('doctor'), validate(issueSchema), controller.issue);
 

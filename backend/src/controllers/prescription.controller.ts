@@ -47,6 +47,15 @@ export async function myPatients(req: Request, res: Response, next: NextFunction
   }
 }
 
+// GET /prescriptions/issued  (doctor's own issued prescriptions + fulfilment status)
+export async function listIssued(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.json(await prescriptions.listForDoctor(req.session.user!.id));
+  } catch (err) {
+    next(err);
+  }
+}
+
 // GET /prescriptions/pharmacy  (pharmacist queue)
 export async function pharmacyQueue(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {

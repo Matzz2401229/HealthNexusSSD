@@ -149,7 +149,40 @@ export async function listAuthorisedPatients(doctorId: number): Promise<Authoris
   );
 }
 
-// --- 6. Update fulfilment status (pharmacist, status-only) ----------------
+// --- 6. A doctor's own issued prescriptions (view + track fulfilment) -----
+export interface DoctorPrescriptionItem {
+  id: number;
+  patient_id: number;
+  patient_name: string;
+  medication: string;
+  dosage: string;
+  instructions: string | null;
+  status: PrescriptionStatus;
+  fulfilment_status: FulfilmentStatus;
+  issued_at: string;
+  fulfilled_at: string | null;
+}
+
+/**
+ * List the prescriptions a doctor has issued, with the patient's name and the
+ * current fulfilment status (Data Control Matrix §9.8: a doctor may "view
+ * fulfilment status"). doctorId comes from the session, never client input
+ * (FSR2); the WHERE clause scopes strictly to the doctor's own records (FSR3).
+ */
+export async function listForDoctor(doctorId: number): Promise<DoctorPrescriptionItem[]> {
+  return runQuery<DoctorPrescriptionItem>(
+    `SELECT p.id, p.patient_id, pt.full_name AS patient_name,
+            p.medication, p.dosage, p.instructions,
+            p.status, p.fulfilment_status, p.issued_at, p.fulfilled_at
+       FROM prescription p
+       JOIN patient pt ON pt.id = p.patient_id
+      WHERE p.doctor_id = ?
+      ORDER BY p.issued_at DESC`,
+    [doctorId],
+  );
+}
+
+// --- 7. Update fulfilment status (pharmacist, status-only) ----------------
 export async function updateFulfilment(
   prescriptionId: number,
   pharmacistId: number,

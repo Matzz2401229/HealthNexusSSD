@@ -10,6 +10,7 @@ jest.mock('../src/services/prescription.service', () => ({
   listForPatient: jest.fn(),
   pharmacyQueue: jest.fn(),
   listAuthorisedPatients: jest.fn(),
+  listForDoctor: jest.fn(),
   getForUser: jest.fn(),
   updateFulfilment: jest.fn(),
   NotAuthorisedError: class NotAuthorisedError extends Error {},
@@ -67,6 +68,18 @@ describe('myPatients (GET /prescriptions/patients)', () => {
     expect((res.body as Array<{ id: number }>)[0].id).toBe(1);
     // identity comes from the session, not client input (FSR2)
     expect(svc.listAuthorisedPatients).toHaveBeenCalledWith(2);
+  });
+});
+
+describe('listIssued (GET /prescriptions/issued)', () => {
+  it('returns 200 with the doctor\'s issued prescriptions (from the session id)', async () => {
+    svc.listForDoctor.mockResolvedValueOnce([{ id: 1, patient_name: 'Test Patient' }] as never);
+    const req = { session: { user: { id: 2, role: 'doctor' } } } as unknown as Request;
+    const res = mockRes();
+    await controller.listIssued(req, res, next);
+    expect(res.statusCode).toBe(200);
+    expect((res.body as Array<{ id: number }>)[0].id).toBe(1);
+    expect(svc.listForDoctor).toHaveBeenCalledWith(2);
   });
 });
 

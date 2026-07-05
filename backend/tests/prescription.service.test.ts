@@ -21,6 +21,7 @@ import {
   getForUser,
   pharmacyQueue,
   listAuthorisedPatients,
+  listForDoctor,
   NotAuthorisedError,
 } from '../src/services/prescription.service';
 
@@ -125,6 +126,28 @@ describe('listAuthorisedPatients (FSR4 scope, FSR2 identity)', () => {
     const patients = await listAuthorisedPatients(7);
     expect(patients).toHaveLength(2);
     expect(patients[0]).toEqual({ id: 1, full_name: 'Test Patient' });
+  });
+});
+
+describe('listForDoctor (§9.8 doctor view + FSR3 scope)', () => {
+  it('scopes strictly to the doctor\'s own records, joins patient, exposes fulfilment', async () => {
+    mockExecute.mockResolvedValueOnce(rows([]));
+    await listForDoctor(7);
+    const sql = mockExecute.mock.calls[0][0] as string;
+    expect(sql).toMatch(/WHERE p\.doctor_id = \?/i);
+    expect(sql).toMatch(/JOIN patient/i);
+    expect(sql).toMatch(/fulfilment_status/i);
+    // doctorId comes from the session, passed positionally (FSR2/FSR9)
+    expect(mockExecute.mock.calls[0][1]).toEqual([7]);
+  });
+
+  it('returns issued prescriptions with patient name + fulfilment status', async () => {
+    mockExecute.mockResolvedValueOnce(rows([
+      { id: 1, patient_id: 5, patient_name: 'Test Patient', medication: 'Amoxicillin', fulfilment_status: 'pending' },
+    ]));
+    const list = await listForDoctor(7);
+    expect(list).toHaveLength(1);
+    expect(list[0].patient_name).toBe('Test Patient');
   });
 });
 
