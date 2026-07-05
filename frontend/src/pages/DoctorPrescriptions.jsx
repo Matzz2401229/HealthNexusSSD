@@ -92,6 +92,11 @@ export default function DoctorPrescriptions() {
                     {p.instructions && (
                       <p style={{ margin: '0.5rem 0 0', fontSize: '0.9rem' }}>{p.instructions}</p>
                     )}
+                    {p.appointment_at && (
+                      <p className="hn-text-muted" style={{ margin: '0.5rem 0 0', fontSize: '0.85rem' }}>
+                        From appointment on {new Date(p.appointment_at).toLocaleDateString()}
+                      </p>
+                    )}
                   </div>
                   <span
                     className="hn-badge"
