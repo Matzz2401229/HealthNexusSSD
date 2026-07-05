@@ -12,9 +12,11 @@ router.use(requireAuth);
 
 const bookSchema = z.object({
     doctorId: z.number().int().positive(),
-    scheduledAt: z.string().datetime()
+    scheduledAt: z.string().datetime().refine((val) => {
+        // only require the appointment to be in the future, not a full day later
+        return new Date(val).getTime() > Date.now();
+    }, { message: 'Appointment must be booked at least 1 day in advance.' })
 });
-
 const rescheduleSchema = z.object({
     scheduledAt: z.string().datetime()
 });
@@ -79,6 +81,12 @@ router.post(
     requireRole('doctor'),
     validate(diagnosisSchema),
     appointmentController.recordDiagnosis
+);
+
+router.get(
+    '/patient/available-doctors',
+    requireRole('patient'),
+    appointmentController.getAvailableDoctors
 );
 
 export default router;

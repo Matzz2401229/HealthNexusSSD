@@ -182,3 +182,12 @@ export async function recordDiagnosis(req: Request, res: Response, next: NextFun
         next(err);
     }
 }
+
+export async function getAvailableDoctors(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+        const doctors = await appointmentService.getAvailableDoctors();
+        res.json({ doctors });
+    } catch (err) {
+        next(err);
+    }
+}

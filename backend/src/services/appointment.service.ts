@@ -160,3 +160,13 @@ export async function recordDiagnosis(appointmentId: number, doctorId: number, r
 
     return res.insertId;
 }
+
+// fetch available doctors for the booking dropdown
+export async function getAvailableDoctors(): Promise<any[]> {
+    return query(
+        `SELECT d.id, d.full_name, d.specialty 
+         FROM doctor d
+         JOIN users u ON d.id = u.id
+         WHERE u.is_active = 1`
+    ) as any;
+}
