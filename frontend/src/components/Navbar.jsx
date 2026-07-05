@@ -1,12 +1,23 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Logo from './Logo';
+import { useAuth } from '../context/AuthContext';
 
 /**
- * Shared top navigation. Appears on every page so branding stays consistent.
- * Auth links adapt to the current route (hide "Login" on the login page, etc.).
+ * Shared top navigation. Reflects auth state: signed-out shows Login/Register;
+ * signed-in shows "Logged in as [role]" + Log out. (UI convenience only — the
+ * real access control is server-side.)
  */
+const ROLE_LABEL = { patient: 'Patient', doctor: 'Doctor', pharmacist: 'Pharmacist', admin: 'Admin' };
+
 export default function Navbar() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  async function onLogout() {
+    await logout();
+    navigate('/login');
+  }
 
   return (
     <nav className="hn-navbar">
@@ -16,11 +27,22 @@ export default function Navbar() {
       </Link>
 
       <div className="hn-nav-links">
-        {pathname !== '/login' && (
-          <Link to="/login" className="hn-btn hn-btn-outline">Login</Link>
-        )}
-        {pathname !== '/register' && (
-          <Link to="/register" className="hn-btn hn-btn-primary">Register</Link>
+        {user ? (
+          <>
+            <Link to="/dashboard" className="hn-text-muted" style={{ fontSize: '0.9rem', marginRight: '0.5rem' }}>
+              Logged in as <strong>{ROLE_LABEL[user.role] ?? user.role}</strong>
+            </Link>
+            <button className="hn-btn hn-btn-outline" onClick={onLogout}>Log out</button>
+          </>
+        ) : (
+          <>
+            {pathname !== '/login' && (
+              <Link to="/login" className="hn-btn hn-btn-outline">Login</Link>
+            )}
+            {pathname !== '/register' && (
+              <Link to="/register" className="hn-btn hn-btn-primary">Register</Link>
+            )}
+          </>
         )}
       </div>
     </nav>

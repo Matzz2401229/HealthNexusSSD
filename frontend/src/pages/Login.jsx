@@ -1,20 +1,33 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 /**
- * Login page — themed, frontend only. The submit handler is a stub; the Auth
- * & session workstream will wire this to POST /api/auth/login (with CSRF token
- * and Secure/HttpOnly cookie handling done server-side).
+ * Login page — wired to POST /api/auth/login via the auth context. On success
+ * the server sets the session cookie and we redirect to the dashboard; on
+ * failure we show the server's generic message (no user enumeration).
  */
 export default function Login() {
   const [form, setForm] = useState({ email: '', password: '' });
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const { login } = useAuth();
+  const navigate = useNavigate();
 
   const update = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
-  const onSubmit = (e) => {
+  const onSubmit = async (e) => {
     e.preventDefault();
-    // TODO (Auth & session workstream): call the backend login endpoint.
-    console.log('login submit (stub)', form.email);
+    setError('');
+    setBusy(true);
+    try {
+      await login(form.email, form.password);
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.message || 'Login failed. Please try again.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -36,6 +49,12 @@ export default function Login() {
           <h2 className="hn-auth__title">Sign in</h2>
           <p className="hn-auth__subtitle">Enter your credentials to continue.</p>
 
+          {error && (
+            <div className="hn-card" style={{ borderColor: 'var(--hn-danger)', padding: '0.75rem 1rem', marginBottom: '1rem' }}>
+              <span style={{ color: 'var(--hn-danger)', fontSize: '0.9rem' }}>{error}</span>
+            </div>
+          )}
+
           <form onSubmit={onSubmit}>
             <div className="hn-field">
               <label className="hn-label" htmlFor="email">Email</label>
@@ -56,7 +75,9 @@ export default function Login() {
               </div>
             </div>
 
-            <button type="submit" className="hn-btn hn-btn-primary hn-btn-block">Sign in</button>
+            <button type="submit" className="hn-btn hn-btn-primary hn-btn-block" disabled={busy}>
+              {busy ? 'Signing in…' : 'Sign in'}
+            </button>
           </form>
 
           <hr className="hn-divider" />
