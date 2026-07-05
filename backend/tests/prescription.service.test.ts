@@ -47,17 +47,33 @@ describe('issuePrescription (FSR4 treatment relationship)', () => {
     expect(mockExecute.mock.calls[0][0]).not.toMatch(/INSERT/i);
   });
 
-  it('issues with doctor_id taken from the session, not the input (FSR2)', async () => {
+  it('issues with doctor_id from the session and auto-captures the treating appointment', async () => {
     mockExecute.mockResolvedValueOnce(rows([{ '1': 1 }]));                 // relationship exists
+    mockExecute.mockResolvedValueOnce(rows([{ id: 55 }]));                 // latestAppointmentId -> 55
     mockExecute.mockResolvedValueOnce(write({ insertId: 42 }));            // INSERT
     mockExecute.mockResolvedValueOnce(rows([{ id: 42, doctor_id: 7 }]));   // re-fetch
 
     const created = await issuePrescription(7, { patientId: 5, medication: 'Amoxicillin', dosage: '500mg' });
 
     expect(created.id).toBe(42);
-    // INSERT params are positional: [patientId, doctorId, ...] — doctorId (index 1) must be the session id 7
-    const insertParams = mockExecute.mock.calls[1][1] as unknown[];
-    expect(insertParams[1]).toBe(7);
+    // the appointment lookup queried the appointment table (FSR4 context)
+    expect(mockExecute.mock.calls[1][0] as string).toMatch(/FROM appointment/i);
+    // INSERT params are positional: [patientId, doctorId, appointmentId, ...]
+    const insertParams = mockExecute.mock.calls[2][1] as unknown[];
+    expect(insertParams[1]).toBe(7);   // doctorId from session (FSR2)
+    expect(insertParams[2]).toBe(55);  // appointmentId auto-resolved (FSR4)
+  });
+
+  it('respects an explicit appointmentId and skips the lookup', async () => {
+    mockExecute.mockResolvedValueOnce(rows([{ '1': 1 }]));                 // relationship exists
+    mockExecute.mockResolvedValueOnce(write({ insertId: 43 }));            // INSERT (no lookup)
+    mockExecute.mockResolvedValueOnce(rows([{ id: 43 }]));                 // re-fetch
+
+    await issuePrescription(7, { patientId: 5, appointmentId: 9, medication: 'X', dosage: '1mg' });
+
+    // no appointment lookup ran — the 2nd DB call is the INSERT, with appointmentId 9
+    expect(mockExecute.mock.calls[1][0] as string).toMatch(/INSERT/i);
+    expect((mockExecute.mock.calls[1][1] as unknown[])[2]).toBe(9);
   });
 });
 

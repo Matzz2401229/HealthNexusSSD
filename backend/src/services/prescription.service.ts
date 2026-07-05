@@ -51,6 +51,12 @@ export async function issuePrescription(doctorId: number, input: IssueInput): Pr
     throw new NotAuthorisedError('No treatment relationship with this patient.');
   }
 
+  // Record the treatment context (FSR4): use the appointment the caller named,
+  // otherwise fall back to this doctor+patient's most recent appointment, so the
+  // prescription is traceable to a consultation instead of storing NULL.
+  const appointmentId =
+    input.appointmentId ?? (await latestAppointmentId(doctorId, input.patientId));
+
   // doctorId is the session user's id — NEVER taken from client input (FSR2).
   const result = await runWrite(
     `INSERT INTO prescription
@@ -59,7 +65,7 @@ export async function issuePrescription(doctorId: number, input: IssueInput): Pr
     [
       input.patientId,
       doctorId,
-      input.appointmentId ?? null,
+      appointmentId,
       input.medication,
       input.dosage,
       input.instructions ?? null,
@@ -259,6 +265,18 @@ async function runWrite(sql: string, params: unknown[]): Promise<ResultSetHeader
 async function getPrescriptionRaw(id: number): Promise<Prescription | null> {
   const rows = await runQuery<Prescription>(`SELECT * FROM prescription WHERE id = ?`, [id]);
   return rows[0] ?? null;
+}
+
+/** The doctor+patient's most recent appointment id, or null if none exists. */
+async function latestAppointmentId(doctorId: number, patientId: number): Promise<number | null> {
+  const rows = await runQuery<{ id: number }>(
+    `SELECT id FROM appointment
+       WHERE doctor_id = ? AND patient_id = ?
+       ORDER BY scheduled_at DESC
+       LIMIT 1`,
+    [doctorId, patientId],
+  );
+  return rows[0]?.id ?? null;
 }
 
 /** FSR4: true if the doctor has an active treatment link or appointment. */
