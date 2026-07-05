@@ -26,6 +26,13 @@ const ROLE_PROFILE_FIELDS: Record<SessionUser['role'], string[]> = {
   admin: ['full_name'],
 };
 
+// mysql2 returns DATE columns as JS Date objects in the server's local
+// timezone; JSON-serialising that shifts the value when the timezone isn't
+// UTC (e.g. midnight local becomes the previous day in UTC). DATE_FORMAT
+// asks MySQL for a plain 'YYYY-MM-DD' string instead, sidestepping the JS
+// Date round-trip entirely — also what <input type="date"> requires.
+const DATE_COLUMNS = new Set(['dob']);
+
 interface ProfileRow extends RowDataPacket {
   id: number;
   email: string;
@@ -52,7 +59,9 @@ export interface ProfileData {
 export async function getProfile(userId: number, role: SessionUser['role']): Promise<ProfileData> {
   const table = ROLE_TABLE[role];
   const roleCols = ROLE_PROFILE_FIELDS[role];
-  const selectCols = roleCols.map((c) => `p.${c}`).join(', ');
+  const selectCols = roleCols
+    .map((c) => (DATE_COLUMNS.has(c) ? `DATE_FORMAT(p.${c}, '%Y-%m-%d') AS ${c}` : `p.${c}`))
+    .join(', ');
 
   const [rows] = await pool.execute<ProfileRow[]>(
     `SELECT u.id, u.email, u.role, u.is_active, u.created_at, ${selectCols}
