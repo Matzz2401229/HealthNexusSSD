@@ -21,6 +21,7 @@ jest.mock('../src/services/audit.service', () => ({
 import * as service from '../src/services/prescription.service';
 import { NotAuthorisedError } from '../src/services/prescription.service';
 import * as controller from '../src/controllers/prescription.controller';
+import { recordAudit } from '../src/services/audit.service';
 
 const svc = service as jest.Mocked<typeof service>;
 
@@ -69,6 +70,59 @@ describe('myPatients (GET /prescriptions/patients)', () => {
   });
 });
 
+describe('listMine (GET /prescriptions/mine)', () => {
+  it('returns 200 with the patient\'s own prescriptions (from the session id)', async () => {
+    svc.listForPatient.mockResolvedValueOnce([{ id: 1 }] as never);
+    const req = { session: { user: { id: 1, role: 'patient' } } } as unknown as Request;
+    const res = mockRes();
+    await controller.listMine(req, res, next);
+    expect(res.statusCode).toBe(200);
+    expect(svc.listForPatient).toHaveBeenCalledWith(1);
+  });
+});
+
+describe('pharmacyQueue (GET /prescriptions/pharmacy)', () => {
+  it('returns 200 with the queue', async () => {
+    svc.pharmacyQueue.mockResolvedValueOnce([{ id: 1 }] as never);
+    const res = mockRes();
+    await controller.pharmacyQueue({} as unknown as Request, res, next);
+    expect(res.statusCode).toBe(200);
+  });
+});
+
+describe('download (GET /prescriptions/:id/download)', () => {
+  const patient = { id: 1, role: 'patient' };
+
+  it('returns 400 for a non-numeric id', async () => {
+    const req = { session: { user: patient }, params: { id: 'x' } } as unknown as Request;
+    const res = mockRes();
+    await controller.download(req, res, next);
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('returns 404 when the user may not see it (IDOR-safe)', async () => {
+    svc.getForUser.mockResolvedValueOnce(null);
+    const req = { session: { user: patient }, params: { id: '5' } } as unknown as Request;
+    const res = mockRes();
+    await controller.download(req, res, next);
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('returns the prescription as a text attachment when allowed', async () => {
+    svc.getForUser.mockResolvedValueOnce({
+      id: 5, medication: 'Amoxicillin', dosage: '500mg',
+      instructions: 'After food', status: 'issued', issued_at: 'now',
+    } as never);
+    const req = { session: { user: patient }, params: { id: '5' } } as unknown as Request;
+    const res = mockRes();
+    await controller.download(req, res, next);
+    expect(res.statusCode).toBe(200);
+    expect(res.body as string).toMatch(/Amoxicillin/);
+    // the download is audit-logged (SR17)
+    expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'prescription.download' }));
+  });
+});
+
 describe('getOne (GET /prescriptions/:id)', () => {
   it('returns 400 for a non-numeric id', async () => {
     const req = { session: { user: { id: 1, role: 'patient' } }, params: { id: 'abc' } } as unknown as Request;
@@ -109,5 +163,12 @@ describe('updateFulfilment (PATCH /prescriptions/:id/fulfilment)', () => {
     const res = mockRes();
     await controller.updateFulfilment(req, res, next);
     expect(res.statusCode).toBe(404);
+  });
+
+  it('returns 400 for a non-numeric id', async () => {
+    const badReq = { session: { user: { id: 3, role: 'pharmacist' } }, params: { id: 'x' }, body: { fulfilmentStatus: 'dispensed' } } as unknown as Request;
+    const res = mockRes();
+    await controller.updateFulfilment(badReq, res, next);
+    expect(res.statusCode).toBe(400);
   });
 });
