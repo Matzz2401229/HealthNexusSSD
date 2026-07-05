@@ -38,6 +38,15 @@ export async function listMine(req: Request, res: Response, next: NextFunction):
   }
 }
 
+// GET /prescriptions/patients  (doctor's authorised patients, for the issue form)
+export async function myPatients(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.json(await prescriptions.listAuthorisedPatients(req.session.user!.id));
+  } catch (err) {
+    next(err);
+  }
+}
+
 // GET /prescriptions/pharmacy  (pharmacist queue)
 export async function pharmacyQueue(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {

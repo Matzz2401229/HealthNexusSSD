@@ -31,6 +31,7 @@ router.use(requireAuth);
 // dynamic /:id route, or Express would treat "mine"/"pharmacy" as an :id.
 router.get('/mine', requireRole('patient'), controller.listMine);
 router.get('/pharmacy', requireRole('pharmacist'), controller.pharmacyQueue);
+router.get('/patients', requireRole('doctor'), controller.myPatients);
 
 router.post('/', requireRole('doctor'), validate(issueSchema), controller.issue);
 

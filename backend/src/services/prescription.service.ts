@@ -120,7 +120,36 @@ export async function pharmacyQueue(): Promise<PharmacyQueueItem[]> {
   );
 }
 
-// --- 5. Update fulfilment status (pharmacist, status-only) ----------------
+// --- 5. Authorised patients for a doctor (backs the "issue" dropdown) ------
+export interface AuthorisedPatient {
+  id: number;
+  full_name: string;
+}
+
+/**
+ * List the patients a doctor is permitted to prescribe to (FSR4): those with an
+ * active treatment relationship OR any appointment. Returns only id + name — the
+ * minimum needed to populate the issue-prescription patient selector, never any
+ * medical history or diagnosis (least privilege). doctorId comes from the
+ * session, never from client input (FSR2).
+ */
+export async function listAuthorisedPatients(doctorId: number): Promise<AuthorisedPatient[]> {
+  return runQuery<AuthorisedPatient>(
+    `SELECT p.id, p.full_name
+       FROM patient p
+      WHERE p.id IN (
+              SELECT patient_id FROM doctor_patient_auth
+                WHERE doctor_id = ? AND revoked_at IS NULL
+              UNION
+              SELECT patient_id FROM appointment
+                WHERE doctor_id = ?
+            )
+      ORDER BY p.full_name ASC`,
+    [doctorId, doctorId],
+  );
+}
+
+// --- 6. Update fulfilment status (pharmacist, status-only) ----------------
 export async function updateFulfilment(
   prescriptionId: number,
   pharmacistId: number,
