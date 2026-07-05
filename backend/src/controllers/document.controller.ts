@@ -13,10 +13,10 @@ import { DocumentAccessError } from '../services/document.service';
 import * as documentService from '../services/document.service';
 
 function assertUser(req: Request) {
-  if (!req.user) {
+  if (!req.session.user) {
     throw new DocumentAccessError('Authentication required.', 401);
   }
-  return req.user;
+  return req.session.user;
 }
 
 function handleDocumentError(err: unknown, next: NextFunction): void {

@@ -49,6 +49,7 @@ export async function recordAudit(event: AuditEvent): Promise<void> {
     );
   } catch (err) {
     // Audit failures must be visible but must not crash the request path.
+    console.error(err);
     logger.error('Failed to write audit entry', { action: event.action });
   }
 }

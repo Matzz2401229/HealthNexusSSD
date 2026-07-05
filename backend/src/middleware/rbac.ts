@@ -10,12 +10,12 @@ import { Role } from './auth';
 
 export function requireRole(...allowed: Role[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    // Role comes only from the server-established session (req.user), set by requireAuth.
-    if (!req.user) {
+    // Role comes only from the server-established session (req.session.user), set by requireAuth.
+    if (!req.session.user) {
       res.status(401).json({ error: 'Authentication required.' });
       return;
     }
-    if (!allowed.includes(req.user.role)) {
+    if (!allowed.includes(req.session.user.role)) {
       res.status(403).json({ error: 'Forbidden.' });
       return;
     }

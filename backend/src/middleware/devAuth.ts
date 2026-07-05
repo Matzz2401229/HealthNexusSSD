@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthenticatedUser, Role } from './auth';
+import { Role } from './auth';
 
 const DEV_USER_ID = 'x-dev-user-id';
 const DEV_USER_ROLE = 'x-dev-user-role';
@@ -10,7 +10,7 @@ const ALLOWED_ROLES: Role[] = ['patient', 'doctor', 'pharmacist', 'admin'];
  * development. Production ignores these headers completely.
  */
 export function devAuth(req: Request, _res: Response, next: NextFunction): void {
-  if (process.env.NODE_ENV === 'production' || req.user) {
+  if (process.env.NODE_ENV === 'production' || req.session.user) {
     next();
     return;
   }
@@ -29,9 +29,10 @@ export function devAuth(req: Request, _res: Response, next: NextFunction): void 
     return;
   }
 
-  req.user = {
+  req.session.user = {
     id: userId,
-    role: roleHeader as AuthenticatedUser['role'],
+    role: roleHeader as Role,
+    status: 'active',
   };
 
   next();

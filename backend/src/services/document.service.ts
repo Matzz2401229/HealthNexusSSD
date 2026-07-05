@@ -6,6 +6,7 @@ import { config } from '../config/env';
 import { validateUpload } from '../middleware/fileUpload';
 import { Role } from '../middleware/auth';
 import { recordAudit } from './audit.service';
+import { AppError } from '../utils/AppError';
 import {
   CreateDocumentRequestInput,
   DocumentRecord,
@@ -15,12 +16,9 @@ import {
   UploadDocumentInput,
 } from '../types/document.types';
 
-export class DocumentAccessError extends Error {
-  statusCode: number;
-
+export class DocumentAccessError extends AppError {
   constructor(message: string, statusCode = 400) {
-    super(message);
-    this.statusCode = statusCode;
+    super(statusCode, message);
   }
 }
 

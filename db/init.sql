@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash  VARCHAR(255) NOT NULL,               -- bcrypt/argon2 only; never plaintext
   role           ENUM('patient','doctor','pharmacist','admin') NOT NULL,
   is_active      BOOLEAN NOT NULL DEFAULT FALSE,       -- doctors inactive until admin approval
+  approval_status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
   email_verified BOOLEAN NOT NULL DEFAULT FALSE,
   failed_logins  INT NOT NULL DEFAULT 0,
   locked_until   DATETIME NULL,
@@ -87,19 +88,52 @@ CREATE TABLE IF NOT EXISTS diagnosis (
 );
 
 CREATE TABLE IF NOT EXISTS prescription (
-  id           BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
-  patient_id   BIGINT UNSIGNED NOT NULL,
-  doctor_id    BIGINT UNSIGNED NOT NULL,
-  -- medication/dosage/issuer are immutable once issued (enforced in service layer)
-  medication   VARCHAR(255) NOT NULL,
-  dosage       VARCHAR(255) NOT NULL,
-  status       ENUM('issued','fulfilled','cancelled') NOT NULL DEFAULT 'issued',
-  issued_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  fulfilled_by BIGINT UNSIGNED NULL,                   -- pharmacist updates status only
-  FOREIGN KEY (patient_id)   REFERENCES patient(id),
-  FOREIGN KEY (doctor_id)    REFERENCES doctor(id),
-  FOREIGN KEY (fulfilled_by) REFERENCES pharmacist(id)
+  id                BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  -- === Clinical fields: IMMUTABLE once issued (FSR13) ===
+  patient_id        BIGINT UNSIGNED NOT NULL,           -- who it is for
+  doctor_id         BIGINT UNSIGNED NOT NULL,           -- issuing doctor (from session, never request body)
+  appointment_id    BIGINT UNSIGNED NULL,               -- treatment context that authorised it (FSR4)
+  medication        VARCHAR(255) NOT NULL,
+  dosage            VARCHAR(255) NOT NULL,
+  instructions      TEXT NULL,                          -- output-encode on render (FSR11)
+  -- === Doctor-writable lifecycle ===
+  status            ENUM('issued','cancelled') NOT NULL DEFAULT 'issued',
+  -- === Pharmacist-writable ONLY (FSR6) ===
+  fulfilment_status ENUM('pending','dispensed','rejected') NOT NULL DEFAULT 'pending',
+  fulfilled_by      BIGINT UNSIGNED NULL,               -- pharmacist who actioned it
+  fulfilled_at      DATETIME NULL,
+  -- === Timestamps ===
+  issued_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (patient_id)     REFERENCES patient(id),
+  FOREIGN KEY (doctor_id)      REFERENCES doctor(id),
+  FOREIGN KEY (appointment_id) REFERENCES appointment(id),
+  FOREIGN KEY (fulfilled_by)   REFERENCES pharmacist(id)
 );
+
+-- Database-level immutability guard (FSR13): reject any UPDATE that tries to
+-- change a clinical field after issue. This is defence in depth — the service
+-- layer also refuses, but the trigger holds even if app logic is bypassed.
+-- (<=> is MySQL null-safe equality, so nullable columns compare correctly.)
+DELIMITER $$
+CREATE TRIGGER trg_prescription_immutable
+BEFORE UPDATE ON prescription
+FOR EACH ROW
+BEGIN
+  IF NEW.patient_id     <> OLD.patient_id
+     OR NEW.doctor_id   <> OLD.doctor_id
+     OR NOT (NEW.appointment_id <=> OLD.appointment_id)
+     OR NEW.medication  <> OLD.medication
+     OR NEW.dosage      <> OLD.dosage
+     OR NOT (NEW.instructions   <=> OLD.instructions)
+     OR NEW.issued_at   <> OLD.issued_at
+  THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Prescription clinical fields are immutable once issued (FSR13)';
+  END IF;
+END$$
+DELIMITER ;
 
 CREATE TABLE IF NOT EXISTS medical_document (
   id            BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
@@ -164,10 +198,21 @@ CREATE TABLE IF NOT EXISTS auditlog (
   -- NB: never store passwords, tokens, or clinical content here.
 );
 
+-- --- Session store (express-mysql-session) --------------------------
+CREATE TABLE IF NOT EXISTS sessions (
+  session_id VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
+  expires    INT UNSIGNED NOT NULL,
+  data       MEDIUMTEXT COLLATE utf8mb4_bin,
+  PRIMARY KEY (session_id)
+) ENGINE=InnoDB;
+
 -- =====================================================================
 -- Restricted application DB user (D1 §9.6): SELECT/INSERT/UPDATE only.
--- No DROP/CREATE/DELETE/admin. Password comes from the environment.
+-- No DROP/CREATE/admin. Password comes from the environment.
+-- DELETE is granted ONLY on `sessions` (needed for logout + expiry),
+-- never on clinical tables.
 -- =====================================================================
 CREATE USER IF NOT EXISTS 'healthnexus_app'@'%' IDENTIFIED BY 'change_me_app_password';
 GRANT SELECT, INSERT, UPDATE ON healthnexus.* TO 'healthnexus_app'@'%';
+GRANT DELETE ON healthnexus.sessions TO 'healthnexus_app'@'%';
 FLUSH PRIVILEGES;
