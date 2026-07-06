@@ -12,7 +12,7 @@ const BASE = '/api';
  * server compares this cookie against the x-csrf-token header. We provision one
  * client-side; SameSite=Strict is what actually blocks cross-site requests.
  */
-function getCsrfToken() {
+export function getCsrfToken() {
   const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
   if (match) return decodeURIComponent(match[1]);
   const token = crypto.randomUUID();
@@ -35,12 +35,35 @@ export async function apiGet(path) {
 }
 
 export async function apiPost(path, body) {
+  const token = getCsrfToken();
+
   return parse(
     await fetch(`${BASE}${path}`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
       body: JSON.stringify(body ?? {}),
+    }),
+  );
+}
+
+export async function apiPatch(path, body) {
+  return parse(
+    await fetch(`${BASE}${path}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+      body: JSON.stringify(body ?? {}),
+    }),
+  );
+}
+
+export async function apiDelete(path) {
+  return parse(
+    await fetch(`${BASE}${path}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'x-csrf-token': getCsrfToken() },
     }),
   );
 }

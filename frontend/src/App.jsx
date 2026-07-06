@@ -1,10 +1,18 @@
 import { Routes, Route, Link } from 'react-router-dom';
 import Navbar from './components/Navbar';
-import ProtectedRoute from './components/ProtectedRoute';
+import ProtectedRoute, { RequireAdmin } from './components/ProtectedRoute';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Prescriptions from './pages/Prescriptions';
+import IssuePrescription from './pages/IssuePrescription';
+import DoctorPrescriptions from './pages/DoctorPrescriptions';
+import PharmacyQueue from './pages/PharmacyQueue';
+import PatientAppointments from './pages/PatientAppointments';
+import DoctorSchedule from './pages/DoctorSchedule';
 import Dashboard from './pages/Dashboard';
+import Profile from './pages/Profile';
+import Admin from './pages/Admin';
 
 /**
  * App shell + routing. The Navbar renders on every page for consistent
@@ -43,6 +51,8 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/patient/appointments" element={<ProtectedRoute> <PatientAppointments /> </ProtectedRoute>} />
+        <Route path="/doctor/schedule" element={<ProtectedRoute> <DoctorSchedule /> </ProtectedRoute>} />
         <Route
           path="/dashboard"
           element={
@@ -51,7 +61,55 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <RequireAdmin>
+              <Admin />
+            </RequireAdmin>
+          }
+        />
         <Route path="/forgot-password" element={<Placeholder title="Forgot password" />} />
+        <Route
+          path="/prescriptions"
+          element={
+            <ProtectedRoute role="patient">
+              <Prescriptions />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/prescriptions/new"
+          element={
+            <ProtectedRoute role="doctor">
+              <IssuePrescription />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/doctor/prescriptions"
+          element={
+            <ProtectedRoute role="doctor">
+              <DoctorPrescriptions />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pharmacy"
+          element={
+            <ProtectedRoute role="pharmacist">
+              <PharmacyQueue />
+            </ProtectedRoute>
+          }
+        />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </>
