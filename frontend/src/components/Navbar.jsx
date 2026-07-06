@@ -13,15 +13,22 @@ const ROLE_LABEL = { patient: 'Patient', doctor: 'Doctor', pharmacist: 'Pharmaci
 // intentionally not listed here.
 const NAV_LINKS = {
   patient: [
+    { to: '/documents', label: 'Documents' },
     { to: '/patient/appointments', label: 'Appointments' },
     { to: '/prescriptions', label: 'Prescriptions' },
   ],
   doctor: [
+    { to: '/documents', label: 'Documents' },
     { to: '/doctor/schedule', label: 'Schedule' },
     { to: '/prescriptions/new', label: 'Issue Prescription' },
   ],
   pharmacist: [
+    { to: '/documents', label: 'Documents' },
     { to: '/pharmacy', label: 'Fulfilment Queue' },
+  ],
+  admin: [
+    { to: '/documents', label: 'Documents' },
+    { to: '/admin', label: 'Admin' },
   ],
 };
 

@@ -16,15 +16,22 @@ const ROLE_LABEL = {
 // Quick-action cards per role. Admin has its own console and is not listed here.
 const QUICK_ACTIONS = {
   patient: [
+    { to: '/documents', title: 'Medical Documents', desc: 'Upload records, review access requests, and download files.' },
     { to: '/patient/appointments', title: 'Appointments', desc: 'Book, view, or cancel your appointments.' },
     { to: '/prescriptions', title: 'My Prescriptions', desc: 'View and download prescriptions issued to you.' },
   ],
   doctor: [
+    { to: '/documents', title: 'Medical Documents', desc: 'Request access to patient records and review approved files.' },
     { to: '/doctor/schedule', title: 'My Schedule', desc: 'View appointments and record diagnoses.' },
     { to: '/prescriptions/new', title: 'Issue Prescription', desc: 'Prescribe medication for a patient you treat.' },
   ],
   pharmacist: [
+    { to: '/documents', title: 'Medical Documents', desc: 'Request and track access to patient-submitted documents.' },
     { to: '/pharmacy', title: 'Fulfilment Queue', desc: 'Review and dispense pending prescriptions.' },
+  ],
+  admin: [
+    { to: '/documents', title: 'Medical Documents', desc: 'Review document access requests and manage clinical record visibility.' },
+    { to: '/admin', title: 'Admin Console', desc: 'Approve staff accounts and manage the platform.' },
   ],
 };
 
