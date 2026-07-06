@@ -117,7 +117,7 @@ export default function DoctorSchedule() {
                             return (
                                 <div key={appt.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--hn-border)', padding: '1rem 1.5rem', borderRadius: 'var(--hn-radius-sm)', background: isActive ? 'var(--hn-white)' : 'var(--hn-bg)' }}>
                                     <div>
-                                        <h3 style={{ margin: '0 0 0.25rem', fontSize: '1.1rem' }}>Patient ID: {appt.patient_id}</h3>
+                                        <h3 style={{ margin: '0 0 0.25rem', fontSize: '1.1rem' }}>{appt.patient_name || `Patient ID: ${appt.patient_id}`}</h3>
                                         <div className="hn-text-muted">
                                             {dateObj.toLocaleDateString()} at {dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                         </div>
@@ -163,7 +163,7 @@ export default function DoctorSchedule() {
                     <div className="hn-card" style={{ width: '100%', maxWidth: '500px', margin: '1rem' }}>
                         <h3 style={{ margin: '0 0 1rem' }}>Record Diagnosis</h3>
                         <p className="hn-text-muted" style={{ marginBottom: '1rem' }}>
-                            For Patient ID: {selectedAppt.patient_id} on {new Date(selectedAppt.scheduled_at).toLocaleDateString()}
+                            For {selectedAppt.patient_name || `Patient ID: ${selectedAppt.patient_id}`} on {new Date(selectedAppt.scheduled_at).toLocaleDateString()}
                         </p>
 
                         <form onSubmit={handleSaveDiagnosis}>
