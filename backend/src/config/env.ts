@@ -47,7 +47,7 @@ export const config = {
 
   upload: {
     maxBytes: num('UPLOAD_MAX_BYTES', 10 * 1024 * 1024),
-    dir: process.env.UPLOAD_DIR ?? '/var/healthnexus/uploads',
+    dir: process.env.UPLOAD_DIR ?? '/tmp/healthnexus/uploads',
   },
 
   isProd(): boolean {
