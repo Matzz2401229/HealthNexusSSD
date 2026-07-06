@@ -25,8 +25,8 @@ USE healthnexus;
 
 -- --- Clean up any previous run of this seed (idempotent) --------------
 SET FOREIGN_KEY_CHECKS = 0;
-DELETE FROM document_request     WHERE document_id IN (1, 2) OR requester_id IN (2, 4);
-DELETE FROM medical_document     WHERE id IN (1, 2) OR patient_id IN (1);
+DELETE FROM document_request     WHERE document_id IN (1, 2, 3) OR requester_id IN (2, 3, 4) OR id IN (1, 2, 3);
+DELETE FROM medical_document     WHERE id IN (1, 2, 3) OR patient_id IN (1);
 DELETE FROM prescription        WHERE patient_id IN (1) OR doctor_id IN (2, 5);
 DELETE FROM diagnosis           WHERE doctor_id IN (2, 5);
 DELETE FROM appointment         WHERE id = 1 OR patient_id IN (1) OR doctor_id IN (2, 5);
