@@ -13,6 +13,7 @@ import DoctorSchedule from './pages/DoctorSchedule';
 import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import Admin from './pages/Admin';
+import Documents from './pages/Documents';
 
 /**
  * App shell + routing. The Navbar renders on every page for consistent
@@ -58,6 +59,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/documents"
+          element={
+            <ProtectedRoute>
+              <Documents />
             </ProtectedRoute>
           }
         />

@@ -48,6 +48,13 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
     return;
   }
 
+  // Local API testing uses explicit opt-in so document work can progress
+  // before the real session/CSRF issuance flow is finished.
+  if (process.env.NODE_ENV !== 'production' && req.get('x-dev-bypass-csrf') === '1') {
+    next();
+    return;
+  }
+
   const cookieToken = req.cookies?.[CSRF_COOKIE];
   const headerToken = req.get(CSRF_HEADER);
 

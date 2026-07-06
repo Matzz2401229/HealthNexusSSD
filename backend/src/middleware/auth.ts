@@ -25,7 +25,6 @@ function rejectExpiredSession(req: Request): never {
   req.session.destroy(() => {});
   throw new AppError(401, 'Authentication required.');
 }
-
 /** Requires any authenticated user. */
 export function requireAuth(req: Request, _res: Response, next: NextFunction): void {
   const user = req.session.user;

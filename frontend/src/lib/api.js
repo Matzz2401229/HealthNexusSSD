@@ -58,6 +58,41 @@ export async function apiPatch(path, body) {
   );
 }
 
+export async function apiUploadRaw(path, file, headers = {}) {
+  return parse(
+    await fetch(`${BASE}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': file.type || 'application/octet-stream',
+        'x-csrf-token': getCsrfToken(),
+        ...headers,
+      },
+      body: file,
+    }),
+  );
+}
+
+export async function apiDownload(path) {
+  const res = await fetch(`${BASE}${path}`, { credentials: 'include' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const err = new Error(data.error || `Request failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+
+  const blob = await res.blob();
+  const disposition = res.headers.get('content-disposition') || '';
+  const match = disposition.match(/filename="([^"]+)"/i);
+
+  return {
+    blob,
+    filename: match?.[1] || 'document.bin',
+    contentType: res.headers.get('content-type') || 'application/octet-stream',
+  };
+}
+
 export async function apiDelete(path) {
   return parse(
     await fetch(`${BASE}${path}`, {
