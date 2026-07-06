@@ -1,8 +1,9 @@
 /**
  * RBAC middleware tests (D1 §9.2, FSR1/FSR5). Verifies deny-by-default role
  * gating from the server-side session only, that denials are audited (SR14/16),
- * and that authorize() composes the guard chain so requireActive can't be
- * omitted (the pending/suspended footgun).
+ * that requireRole itself blocks pending/suspended accounts (closing a real gap
+ * where feature routes called requireRole directly without requireActive), and
+ * that authorize() composes the fuller guard chain for new routes.
  */
 jest.mock('../src/db/pool', () => ({ pool: { execute: jest.fn() } }));
 jest.mock('../src/services/audit.service', () => ({ recordAudit: jest.fn() }));
@@ -49,7 +50,7 @@ describe('requireRole', () => {
   it('403s and audits the failure when the role is not allowed', () => {
     const res = mockRes();
     const next = jest.fn();
-    requireRole('admin')(req({ id: 3, role: 'patient' }), res, next);
+    requireRole('admin')(req({ id: 3, role: 'patient', status: 'active' }), res, next);
     expect(res.statusCode).toBe(403);
     expect(next).not.toHaveBeenCalled();
     expect(mockAudit).toHaveBeenCalledWith(
@@ -57,10 +58,30 @@ describe('requireRole', () => {
     );
   });
 
-  it('calls next() when the role is allowed, and does not audit', () => {
+  it('403s and audits a PENDING account even when the role matches (FSR5 — the real gap found during manual testing)', () => {
     const res = mockRes();
     const next = jest.fn();
-    requireRole('admin', 'doctor')(req({ id: 1, role: 'admin' }), res, next);
+    requireRole('doctor')(req({ id: 5, role: 'doctor', status: 'pending' }), res, next);
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toMatchObject({ error: expect.stringMatching(/not active/i) });
+    expect(next).not.toHaveBeenCalled();
+    expect(mockAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ result: 'failure', action: 'rbac.inactive_denied', userId: 5 }),
+    );
+  });
+
+  it('403s a SUSPENDED account even when the role matches', () => {
+    const res = mockRes();
+    const next = jest.fn();
+    requireRole('admin')(req({ id: 9, role: 'admin', status: 'suspended' }), res, next);
+    expect(res.statusCode).toBe(403);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('calls next() when the role is allowed AND the account is active, and does not audit', () => {
+    const res = mockRes();
+    const next = jest.fn();
+    requireRole('admin', 'doctor')(req({ id: 1, role: 'admin', status: 'active' }), res, next);
     expect(next).toHaveBeenCalledTimes(1);
     expect(mockAudit).not.toHaveBeenCalled();
   });

@@ -3,11 +3,18 @@
  * Enforced server-side on every endpoint; deny-by-default; least privilege.
  * Frontend role checks are NOT a security control.
  *
- * `requireRole` is the coarse role gate. `authorize()` is the recommended
- * composed guard for protected routes: it chains auth -> active -> role ->
- * ownership in the correct order so `requireActive` can't be omitted by mistake
- * — a *pending* or *suspended* account otherwise slips past a bare requireRole,
- * which checks the role but not the account status (FSR5).
+ * `requireRole` is the enforced gate for every role-restricted route: it checks
+ * BOTH the role AND that the account is fully active (FSR5), so a *pending* or
+ * *suspended* account is blocked even on a route that only calls requireRole
+ * directly (as most feature routers in this codebase do — they don't all use
+ * the composed `authorize()` helper below). This was previously a real gap:
+ * routes wired with requireAuth + requireRole alone let pending/suspended
+ * accounts through, because the active check lived in a separate middleware
+ * (`requireActive`, auth.ts) that nothing called. Baking the check into
+ * requireRole closes it retroactively for every existing route.
+ *
+ * `authorize()` remains available as the fuller composed guard for NEW routes
+ * that also need an ownership/IDOR check.
  *
  * Usage:
  *   router.get('/admin/users', requireAuth, requireRole('admin'), handler)
@@ -26,16 +33,31 @@ import { recordAudit } from '../services/audit.service';
 
 export function requireRole(...allowed: Role[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    // Role comes only from the server-established session (req.session.user), set by requireAuth.
-    if (!req.session.user) {
+    // Role/status come only from the server-established session (req.session.user), set by requireAuth.
+    const user = req.session.user;
+    if (!user) {
       res.status(401).json({ error: 'Authentication required.' });
       return;
     }
-    if (!allowed.includes(req.session.user.role)) {
+    if (user.status !== 'active') {
+      // FSR5: a pending (unapproved) or suspended account gets zero role-gated
+      // access, regardless of what role it holds.
+      void recordAudit({
+        userId: user.id,
+        role: user.role,
+        action: 'rbac.inactive_denied',
+        target: `${req.method} ${req.originalUrl}`,
+        ip: req.ip,
+        result: 'failure',
+      });
+      res.status(403).json({ error: 'Your account is not active.' });
+      return;
+    }
+    if (!allowed.includes(user.role)) {
       // Log the broken-access-control attempt (SR14/SR16) before denying.
       void recordAudit({
-        userId: req.session.user.id,
-        role: req.session.user.role,
+        userId: user.id,
+        role: user.role,
         action: 'rbac.role_denied',
         target: `${req.method} ${req.originalUrl}`,
         ip: req.ip,
