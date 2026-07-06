@@ -33,6 +33,8 @@ export const sessionMiddleware = session({
     httpOnly: true,
     secure: env.isProd(),
     sameSite: 'strict',
-    maxAge: 15 * 60 * 1000,
+    // NFSR5: idle timeout, in ms. Env-configurable, same as the absolute
+    // timeout enforced separately in middleware/auth.ts.
+    maxAge: env.session.idleTimeoutMin * 60 * 1000,
   },
 });
