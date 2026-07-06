@@ -18,6 +18,7 @@ export default function DoctorPrescriptions() {
   const [state, setState] = useState('loading'); // loading | ready | error
   const [busyId, setBusyId] = useState(null);
   const [actionError, setActionError] = useState(null);
+  const [tab, setTab] = useState('pending'); // pending | dispensed | rejected | cancelled
 
   function load() {
     setState('loading');
@@ -44,6 +45,20 @@ export default function DoctorPrescriptions() {
       setBusyId(null);
     }
   }
+
+  const groups = {
+    pending: items.filter((p) => p.status === 'issued' && p.fulfilment_status === 'pending'),
+    dispensed: items.filter((p) => p.fulfilment_status === 'dispensed'),
+    rejected: items.filter((p) => p.fulfilment_status === 'rejected'),
+    cancelled: items.filter((p) => p.status === 'cancelled'),
+  };
+  const TABS = [
+    { key: 'pending', label: 'Pending' },
+    { key: 'dispensed', label: 'Dispensed' },
+    { key: 'rejected', label: 'Rejected' },
+    { key: 'cancelled', label: 'Cancelled' },
+  ];
+  const shown = groups[tab];
 
   return (
     <div className="hn-page">
@@ -72,8 +87,35 @@ export default function DoctorPrescriptions() {
       )}
 
       {state === 'ready' && items.length > 0 && (
-        <div style={{ display: 'grid', gap: '1rem', marginTop: '1.5rem' }}>
-          {items.map((p) => {
+        <div style={{ display: 'flex', gap: '0.25rem', margin: '1.5rem 0 1.25rem', borderBottom: '1px solid var(--hn-border)' }}>
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                borderBottom: tab === t.key ? '2px solid var(--hn-primary)' : '2px solid transparent',
+                color: tab === t.key ? 'var(--hn-primary-darker)' : 'var(--hn-muted)',
+                fontWeight: tab === t.key ? 600 : 500,
+                fontSize: '0.95rem',
+                padding: '0.5rem 0.9rem',
+                cursor: 'pointer',
+              }}
+            >
+              {t.label} ({groups[t.key].length})
+            </button>
+          ))}
+        </div>
+      )}
+
+      {state === 'ready' && items.length > 0 && shown.length === 0 && (
+        <p className="hn-text-muted">No {tab} prescriptions.</p>
+      )}
+
+      {state === 'ready' && shown.length > 0 && (
+        <div style={{ display: 'grid', gap: '1rem' }}>
+          {shown.map((p) => {
             const cancellable = p.status === 'issued' && p.fulfilment_status === 'pending';
             // A cancelled prescription shows "Cancelled" — not its leftover
             // fulfilment status (which stays 'pending' since it was never dispensed).
