@@ -172,3 +172,12 @@ export async function logout(req: Request, res: Response): Promise<void> {
 
   res.status(200).json({ message: 'Logged out.' });
 }
+
+/** GET /api/auth/me — current session user (from the server-side session only). */
+export async function me(req: Request, res: Response): Promise<void> {
+  if (!req.session.user) {
+    throw new AppError(401, 'Authentication required.');
+  }
+
+  res.status(200).json({ user: req.session.user });
+}
