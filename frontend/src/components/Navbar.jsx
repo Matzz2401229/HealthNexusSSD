@@ -71,6 +71,7 @@ export default function Navbar() {
             <Link to="/dashboard" className="hn-text-muted" style={{ fontSize: '0.9rem', marginRight: '0.5rem' }}>
               Logged in as <strong>{ROLE_LABEL[user.role] ?? user.role}</strong>
             </Link>
+            <Link to="/profile" className="hn-btn hn-btn-outline" style={{ marginRight: '0.5rem' }}>Profile</Link>
             <button className="hn-btn hn-btn-outline" onClick={onLogout}>Log out</button>
           </>
         ) : (

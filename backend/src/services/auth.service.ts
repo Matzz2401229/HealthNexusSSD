@@ -200,7 +200,7 @@ export async function login(
 
   // Map the team's is_active boolean onto the session status shape.
   const status: SessionUser['status'] = user.is_active ? 'active' : 'pending';
-  return { id: user.id, role: user.role, status };
+  return { id: user.id, role: user.role, status, loginAt: Date.now() }; // NFSR5
 }
 
 /** Increment failed-login counter; lock at the threshold (D1 9.1). */

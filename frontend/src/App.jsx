@@ -11,6 +11,7 @@ import PharmacyQueue from './pages/PharmacyQueue';
 import PatientAppointments from './pages/PatientAppointments';
 import DoctorSchedule from './pages/DoctorSchedule';
 import Dashboard from './pages/Dashboard';
+import Profile from './pages/Profile';
 import Admin from './pages/Admin';
 
 /**
@@ -57,6 +58,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
             </ProtectedRoute>
           }
         />
