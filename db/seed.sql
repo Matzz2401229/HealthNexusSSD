@@ -25,8 +25,8 @@ USE healthnexus;
 
 -- --- Clean up any previous run of this seed (idempotent) --------------
 SET FOREIGN_KEY_CHECKS = 0;
-DELETE FROM document_request     WHERE document_id IN (1, 2, 3) OR requester_id IN (2, 3, 4) OR id IN (1, 2, 3);
-DELETE FROM medical_document     WHERE id IN (1, 2, 3) OR patient_id IN (1);
+DELETE FROM document_request     WHERE document_id IN (1, 2, 3, 4, 5, 6) OR requester_id IN (2, 3, 4) OR id IN (1, 2, 3, 4, 5, 6);
+DELETE FROM medical_document     WHERE id IN (1, 2, 3, 4, 5, 6) OR patient_id IN (1);
 DELETE FROM prescription        WHERE patient_id IN (1) OR doctor_id IN (2, 5);
 DELETE FROM diagnosis           WHERE doctor_id IN (2, 5);
 DELETE FROM appointment         WHERE id = 1 OR patient_id IN (1) OR doctor_id IN (2, 5);
@@ -117,6 +117,39 @@ VALUES
     'imaging',
     'Imaging summary uploaded after respiratory follow-up appointment.',
     'active'
+  ),
+  (
+    4, 1, 1,
+    '44444444-4444-4444-4444-444444444444.pdf',
+    'HbA1c Monitoring Result - 02 Apr 2026.pdf',
+    'application/pdf',
+    154210,
+    '4444444444444444444444444444444444444444444444444444444444444444',
+    'lab',
+    'Quarterly diabetes monitoring result uploaded for ongoing chronic care review.',
+    'active'
+  ),
+  (
+    5, 1, 1,
+    '55555555-5555-5555-5555-555555555555.pdf',
+    'Discharge Summary - Community Hospital.pdf',
+    'application/pdf',
+    286930,
+    '5555555555555555555555555555555555555555555555555555555555555555',
+    'general',
+    'Hospital discharge summary covering follow-up medication and care instructions.',
+    'active'
+  ),
+  (
+    6, 1, 1,
+    '66666666-6666-6666-6666-666666666666.pdf',
+    'Respiratory Medication Review - May 2026.pdf',
+    'application/pdf',
+    121604,
+    '6666666666666666666666666666666666666666666666666666666666666666',
+    'prescription',
+    'Medication review notes uploaded to support ongoing respiratory treatment.',
+    'active'
   );
 
 -- --- Sample document access requests ---------------------------------
@@ -144,4 +177,25 @@ VALUES
     'denied',
     1,
     NOW()
+  ),
+  (
+    4, 4, 2, 'doctor',
+    'Need the latest HbA1c result for chronic care follow-up.',
+    'approved',
+    1,
+    NOW()
+  ),
+  (
+    5, 5, 4, 'admin',
+    'Operational review of discharge documentation attached to the patient record.',
+    'approved',
+    1,
+    NOW()
+  ),
+  (
+    6, 6, 2, 'doctor',
+    'Requesting medication review notes to assess current respiratory treatment plan.',
+    'pending',
+    NULL,
+    NULL
   );

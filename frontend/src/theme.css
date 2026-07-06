@@ -211,6 +211,20 @@ a:hover { color: var(--hn-primary-dark); text-decoration: underline; }
   gap: 1.25rem;
 }
 
+.hn-doc-grid-patient {
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
+}
+
+.hn-doc-grid-patient-secondary {
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+}
+
+.hn-doc-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
 .hn-doc-request-form {
   display: grid;
   grid-template-columns: minmax(120px, 160px) minmax(0, 1fr) auto;
@@ -256,8 +270,21 @@ a:hover { color: var(--hn-primary-dark); text-decoration: underline; }
   background: var(--hn-primary-tint-2);
 }
 
+.hn-request-card {
+  border: 1px solid var(--hn-border);
+  border-radius: var(--hn-radius-sm);
+  background: var(--hn-surface);
+  padding: 1rem;
+}
+
 @media (max-width: 820px) {
   .hn-doc-request-form {
+    grid-template-columns: 1fr;
+  }
+
+  .hn-doc-summary-grid,
+  .hn-doc-grid-patient,
+  .hn-doc-grid-patient-secondary {
     grid-template-columns: 1fr;
   }
 }
