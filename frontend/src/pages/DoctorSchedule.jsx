@@ -23,6 +23,7 @@ export default function DoctorSchedule() {
     // Modal State
     const [selectedAppt, setSelectedAppt] = useState(null);
     const [diagnosisRemarks, setDiagnosisRemarks] = useState('');
+    const [tab, setTab] = useState('upcoming'); // upcoming | completed | cancelled
 
     useEffect(() => {
         fetchSchedule();
@@ -88,6 +89,18 @@ export default function DoctorSchedule() {
         setDiagnosisRemarks('');
     };
 
+    const groups = {
+        upcoming: appointments.filter((a) => a.status === 'booked' || a.status === 'rescheduled'),
+        completed: appointments.filter((a) => a.status === 'completed'),
+        cancelled: appointments.filter((a) => a.status === 'cancelled'),
+    };
+    const TABS = [
+        { key: 'upcoming', label: 'Upcoming' },
+        { key: 'completed', label: 'Completed' },
+        { key: 'cancelled', label: 'Cancelled' },
+    ];
+    const shown = groups[tab];
+
     return (
         <div className="hn-page">
             <span className="hn-badge">Doctor Portal</span>
@@ -102,15 +115,35 @@ export default function DoctorSchedule() {
             )}
 
             <div className="hn-card">
-                <h2 style={{ fontSize: '1.4rem', marginBottom: '1rem' }}>Upcoming Appointments</h2>
+                {/* Status tabs */}
+                <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--hn-border)' }}>
+                    {TABS.map((t) => (
+                        <button
+                            key={t.key}
+                            onClick={() => setTab(t.key)}
+                            style={{
+                                background: 'transparent',
+                                border: 'none',
+                                borderBottom: tab === t.key ? '2px solid var(--hn-primary)' : '2px solid transparent',
+                                color: tab === t.key ? 'var(--hn-primary-darker)' : 'var(--hn-muted)',
+                                fontWeight: tab === t.key ? 600 : 500,
+                                fontSize: '0.95rem',
+                                padding: '0.5rem 0.9rem',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            {t.label} ({groups[t.key].length})
+                        </button>
+                    ))}
+                </div>
 
                 {loading ? (
                     <p className="hn-text-muted">Loading schedule...</p>
-                ) : appointments.length === 0 ? (
-                    <p className="hn-text-muted">Your schedule is clear.</p>
+                ) : shown.length === 0 ? (
+                    <p className="hn-text-muted">No {tab} appointments.</p>
                 ) : (
                     <div style={{ display: 'grid', gap: '1rem' }}>
-                        {appointments.map((appt) => {
+                        {shown.map((appt) => {
                             const dateObj = new Date(appt.scheduled_at);
                             const isActive = appt.status === 'booked' || appt.status === 'rescheduled';
 
