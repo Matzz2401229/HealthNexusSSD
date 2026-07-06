@@ -30,6 +30,8 @@ services:
       - .env
     expose:
       - "8080"
+    volumes:
+      - ./backend/uploads:/tmp/healthnexus/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -46,6 +48,8 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     # No `ports:` block — DB is only reachable on the internal compose network.
+    ports:
+    - "3307:3306" # !! to be deleted once whole project is done
     volumes:
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - db_data:/var/lib/mysql

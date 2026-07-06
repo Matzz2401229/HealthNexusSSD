@@ -63,6 +63,7 @@ describe('registration', () => {
     expect(usersInsert).toMatch(/INSERT INTO users/i);
     expect(usersInsert).toMatch(/'patient'/);
     expect(usersInsert).toMatch(/TRUE/);
+    expect(usersInsert).toMatch(/'approved'/i);
     expect(conn.commit).toHaveBeenCalled();
     expect(conn.release).toHaveBeenCalled();
   });
@@ -77,6 +78,7 @@ describe('registration', () => {
     const usersInsert = conn.execute.mock.calls[0][0] as string;
     expect(usersInsert).toMatch(/'doctor'/);
     expect(usersInsert).toMatch(/FALSE/);
+    expect(usersInsert).toMatch(/'pending'/i);
   });
 
   it('creates a pharmacist as INACTIVE and writes the pharmacist profile (§9.8)', async () => {
@@ -90,6 +92,7 @@ describe('registration', () => {
     const usersInsert = conn.execute.mock.calls[0][0] as string;
     expect(usersInsert).toMatch(/'pharmacist'/);
     expect(usersInsert).toMatch(/FALSE/); // inactive until an admin approves
+    expect(usersInsert).toMatch(/'pending'/i);
     const profileInsert = conn.execute.mock.calls[1][0] as string;
     expect(profileInsert).toMatch(/INSERT INTO pharmacist/i);
     expect(conn.execute.mock.calls[1][1]).toEqual([7, 'Ph', 'Central']);
