@@ -1,10 +1,11 @@
 import 'express-session';
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { AppError } from '../utils/AppError';
 import { validatePasswordPolicy } from '../utils/password';
 import { attachCsrfToken, clearCsrfToken } from '../middleware/csrf';
 import * as authService from '../services/auth.service';
+import { recordAudit } from '../services/audit.service';
 
 /**
  * Auth controllers — OWNER: IS (Adil)
@@ -102,35 +103,75 @@ export async function registerPharmacist(req: Request, res: Response): Promise<v
 }
 
 /** POST /api/auth/login  (FR3, SR2) */
-export async function login(req: Request, res: Response): Promise<void> {
+export async function login(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   const parsed = loginSchema.safeParse(req.body);
+
   if (!parsed.success) {
-    throw new AppError(400, 'Invalid request.'); // generic on purpose
+    throw new AppError(400, 'Invalid request.');
   }
 
-  const sessionUser = await authService.login(parsed.data.email, parsed.data.password);
+  try {
+    const sessionUser = await authService.login(
+      parsed.data.email,
+      parsed.data.password,
+    );
 
-  // FSR8: regenerate session id on login to prevent session fixation.
-  await new Promise<void>((resolve, reject) => {
-    req.session.regenerate((err) => (err ? reject(err) : resolve()));
-  });
+    await new Promise<void>((resolve, reject) => {
+      req.session.regenerate((err) => (err ? reject(err) : resolve()));
+    });
 
-  // Store ONLY minimal identity server-side (FSR2). No PHI, no password.
-  req.session.user = sessionUser;
+    req.session.user = sessionUser;
 
-  await new Promise<void>((resolve, reject) => {
-    req.session.save((err) => (err ? reject(err) : resolve()));
-  });
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err) => (err ? reject(err) : resolve()));
+    });
 
-  // FSR12: issue the anti-CSRF token server-side, tied to the same moment a
-  // fresh session begins.
-  attachCsrfToken(res);
+    attachCsrfToken(res);
 
-  res.status(200).json({ message: 'Login successful.', user: sessionUser });
+    await recordAudit({
+      userId: sessionUser.id,
+      role: sessionUser.role,
+      action: 'login',
+      target: parsed.data.email,
+      ip: req.ip,
+      result: 'success',
+    });
+
+    res.status(200).json({
+      message: 'Login successful.',
+      user: sessionUser,
+    });
+
+  } catch (err) {
+
+    await recordAudit({
+      userId: null,
+      role: null,
+      action: 'login',
+      target: parsed.data.email,
+      ip: req.ip,
+      result: 'failure',
+    });
+
+    next(err);
+  }
 }
 
 /** POST /api/auth/logout  (D1 9.1: server-side session invalidation) */
 export async function logout(req: Request, res: Response): Promise<void> {
+  await recordAudit({
+    userId: req.session.user?.id ?? null,
+    role: req.session.user?.role ?? null,
+    action: 'logout',
+    target:  `User ID: ${req.session.user?.id}`,
+    ip: req.ip,
+    result: 'success',
+  });
+
   await new Promise<void>((resolve, reject) => {
     req.session.destroy((err) => (err ? reject(err) : resolve()));
   });

@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useEffect, useState } from "react";
+import { apiGet } from "../lib/api";
 
 /**
  * Post-login landing page. Greets the user and surfaces quick-action cards for
@@ -41,6 +43,20 @@ export default function Dashboard() {
   const role = ROLE_LABEL[user.role] ?? user.role;
   const isPending = user.status === 'pending';
   const actions = isPending ? [] : (QUICK_ACTIONS[user.role] ?? []);
+  const [announcements, setAnnouncements] = useState([]);
+
+  const loadAnnouncements = async () => {
+    try {
+      const data = await apiGet("/admin/announcements");
+      setAnnouncements(data || []);
+    } catch (err) {
+      console.log("Failed to load announcements");
+    }
+  };
+
+  useEffect(() => {
+    loadAnnouncements();
+  }, []);
 
   return (
     <div className="hn-page">
@@ -57,6 +73,21 @@ export default function Dashboard() {
             An admin needs to activate your account before these features unlock.
           </p>
         </div>
+      )}
+
+      {announcements.length > 0 && (
+            <div className="hn-card" style={{ marginBottom: '1rem' }}>
+              <h3 style={{ marginTop: 0 }}>Announcements</h3>
+
+              {announcements.map((a) => (
+                <div key={a.id} style={{ marginBottom: '0.75rem' }}>
+                  <strong>{a.title}</strong>
+                  <p className="hn-text-muted" style={{ margin: 0 }}>
+                    {a.body}
+                  </p>
+                </div>
+              ))}
+            </div>
       )}
 
       {actions.length > 0 && (

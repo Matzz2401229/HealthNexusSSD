@@ -7,6 +7,7 @@ import {
   verifyPassword,
   dummyPasswordCompare,
 } from '../utils/password';
+import { logger } from '../utils/logger';
 
 /**
  * Authentication service — OWNER: IS (Adil)
@@ -160,6 +161,54 @@ export async function registerPharmacist(
   }
 }
 
+export interface RegisterAdminInput {
+  name: string;
+  email: string;
+  password: string;
+}
+
+export async function registerAdmin(
+  input: RegisterAdminInput,
+): Promise<{ id: number }> {
+  const email = normaliseEmail(input.email);
+  const passwordHash = await hashPassword(input.password);
+
+  const conn = await pool.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    const [userResult] = await conn.execute<ResultSetHeader>(
+      `INSERT INTO users
+       (email, password_hash, role, is_active, approval_status)
+       VALUES (?, ?, 'admin', TRUE, 'approved')`,
+      [email, passwordHash],
+    );
+
+    const userId = userResult.insertId;
+
+    await conn.execute<ResultSetHeader>(
+      `INSERT INTO admin (id, full_name)
+       VALUES (?, ?)`,
+      [userId, input.name],
+    );
+
+    await conn.commit();
+
+    return { id: userId };
+  } catch (err) {
+    await conn.rollback();
+    throw translateInsertError(err);
+  } finally {
+    conn.release();
+  }
+}
+
+export interface SuspiciousAccount {
+  email: string;
+  failedAttempts: number;
+}
+
 /** Authenticate by email + password (FR3, SR2). */
 export async function login(
   rawEmail: string,
@@ -223,6 +272,30 @@ async function registerFailedAttempt(
       `UPDATE users SET failed_logins = ? WHERE id = ?`,
       [nextAttempts, userId],
     );
+  }
+}
+
+export async function listSuspiciousAccounts(): Promise<SuspiciousAccount[]> {
+  try {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `
+      SELECT
+          target AS email,
+          COUNT(*) AS failedAttempts
+      FROM auditlog
+      WHERE action = 'login'
+        AND result = 'failure'
+        AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+      GROUP BY target
+      HAVING COUNT(*) >= 5
+      ORDER BY failedAttempts DESC
+      `
+    );
+
+    return rows as SuspiciousAccount[];
+  } catch (err) {
+    logger.error("Failed to list suspicious accounts", { err });
+    return [];
   }
 }
 

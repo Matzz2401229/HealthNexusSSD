@@ -14,6 +14,11 @@ import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import Admin from './pages/Admin';
 import Documents from './pages/Documents';
+import AdminDoctors from './pages/AdminDoctors';
+import AdminUsers from './pages/AdminUsers';
+import AdminCreateUser from './pages/AdminCreateUser';
+import AdminAudit from './pages/AdminAudit';
+import AdminAnnouncements from './pages/AdminAnnouncements';
 
 /**
  * App shell + routing. The Navbar renders on every page for consistent
@@ -85,6 +90,18 @@ export default function App() {
               <Admin />
             </RequireAdmin>
           }
+        />
+        <Route path="/admin/doctors" element={<RequireAdmin><AdminDoctors /></RequireAdmin>} />
+
+        <Route path="/admin/users" element={<RequireAdmin><AdminUsers /></RequireAdmin>} />
+
+        <Route path="/admin/users/new" element={<RequireAdmin><AdminCreateUser /></RequireAdmin>} />
+
+        <Route path="/admin/audit" element={<RequireAdmin><AdminAudit /></RequireAdmin>} />
+
+        <Route
+            path="/admin/announcements"
+            element={<RequireAdmin><AdminAnnouncements /></RequireAdmin>}
         />
         <Route path="/forgot-password" element={<Placeholder title="Forgot password" />} />
         <Route
