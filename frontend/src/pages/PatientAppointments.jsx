@@ -23,6 +23,11 @@ export default function PatientAppointments() {
     const [error, setError] = useState(null);
     const [successMsg, setSuccessMsg] = useState(null);
 
+    // Diagnosis modal (view) state
+    const [viewingAppt, setViewingAppt] = useState(null);
+    const [diagnosis, setDiagnosis] = useState([]);
+    const [diagnosisState, setDiagnosisState] = useState('loading'); // loading | ready | error
+
     // Form state for booking - Split Date and Time
     const [bookForm, setBookForm] = useState({
         doctorId: '',
@@ -112,6 +117,25 @@ export default function PatientAppointments() {
             setError(err.message);
         }
     };
+
+    // View the doctor's diagnosis for a completed appointment (FR12). The
+    // backend only returns it if this appointment belongs to the patient.
+    const viewDiagnosis = async (appt) => {
+        setViewingAppt(appt);
+        setDiagnosis([]);
+        setDiagnosisState('loading');
+        try {
+            const res = await apiFetch(`/appointments/patient/${appt.id}/diagnosis`);
+            if (!res.ok) throw new Error('Failed to load diagnosis');
+            const data = await res.json();
+            setDiagnosis(data.diagnosis || []);
+            setDiagnosisState('ready');
+        } catch {
+            setDiagnosisState('error');
+        }
+    };
+
+    const closeDiagnosis = () => setViewingAppt(null);
 
     // get tomorrows date to match the 1 day backend validation
     const tomorrow = new Date();
@@ -231,6 +255,15 @@ export default function PatientAppointments() {
                                                     Cancel
                                                 </button>
                                             )}
+                                            {appt.status === 'completed' && (
+                                                <button
+                                                    onClick={() => viewDiagnosis(appt)}
+                                                    className="hn-btn hn-btn-outline"
+                                                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+                                                >
+                                                    View Diagnosis
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 );
@@ -239,6 +272,38 @@ export default function PatientAppointments() {
                     )}
                 </div>
             </div>
+
+            {/* DIAGNOSIS MODAL (view) */}
+            {viewingAppt && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div className="hn-card" style={{ width: '100%', maxWidth: '500px', margin: '1rem' }}>
+                        <h3 style={{ margin: '0 0 0.5rem' }}>Diagnosis</h3>
+                        <p className="hn-text-muted" style={{ marginBottom: '1rem', fontSize: '0.9rem' }}>
+                            Appointment on {new Date(viewingAppt.scheduled_at).toLocaleDateString()}
+                        </p>
+
+                        {diagnosisState === 'loading' && <p className="hn-text-muted">Loading…</p>}
+                        {diagnosisState === 'error' && (
+                            <p style={{ color: 'var(--hn-danger)' }}>Couldn’t load the diagnosis. Please try again.</p>
+                        )}
+                        {diagnosisState === 'ready' && diagnosis.length === 0 && (
+                            <p className="hn-text-muted">No diagnosis has been recorded for this appointment yet.</p>
+                        )}
+                        {diagnosisState === 'ready' && diagnosis.map((d) => (
+                            <div key={d.id} style={{ marginBottom: '0.75rem' }}>
+                                <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{d.remarks}</p>
+                                <span className="hn-text-muted" style={{ fontSize: '0.8rem' }}>
+                                    {new Date(d.created_at).toLocaleString()}
+                                </span>
+                            </div>
+                        ))}
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+                            <button type="button" onClick={closeDiagnosis} className="hn-btn hn-btn-primary">Close</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

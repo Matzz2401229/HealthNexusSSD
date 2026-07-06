@@ -23,6 +23,7 @@ const QUICK_ACTIONS = {
   doctor: [
     { to: '/documents', title: 'Medical Documents', desc: 'Request access to patient records and review approved files.' },
     { to: '/doctor/schedule', title: 'My Schedule', desc: 'View appointments and record diagnoses.' },
+    { to: '/doctor/prescriptions', title: 'My Prescriptions', desc: 'Track prescriptions you’ve issued and their status.' },
     { to: '/prescriptions/new', title: 'Issue Prescription', desc: 'Prescribe medication for a patient you treat.' },
   ],
   pharmacist: [

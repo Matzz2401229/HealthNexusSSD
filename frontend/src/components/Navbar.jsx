@@ -20,6 +20,7 @@ const NAV_LINKS = {
   doctor: [
     { to: '/documents', label: 'Documents' },
     { to: '/doctor/schedule', label: 'Schedule' },
+    { to: '/doctor/prescriptions', label: 'Prescriptions' },
     { to: '/prescriptions/new', label: 'Issue Prescription' },
   ],
   pharmacist: [

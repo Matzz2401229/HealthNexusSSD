@@ -10,8 +10,11 @@ jest.mock('../src/services/prescription.service', () => ({
   listForPatient: jest.fn(),
   pharmacyQueue: jest.fn(),
   listAuthorisedPatients: jest.fn(),
+  listAppointmentsForIssue: jest.fn(),
+  listForDoctor: jest.fn(),
   getForUser: jest.fn(),
   updateFulfilment: jest.fn(),
+  cancelPrescription: jest.fn(),
   NotAuthorisedError: class NotAuthorisedError extends Error {},
 }));
 jest.mock('../src/services/audit.service', () => ({
@@ -67,6 +70,36 @@ describe('myPatients (GET /prescriptions/patients)', () => {
     expect((res.body as Array<{ id: number }>)[0].id).toBe(1);
     // identity comes from the session, not client input (FSR2)
     expect(svc.listAuthorisedPatients).toHaveBeenCalledWith(2);
+  });
+});
+
+describe('patientAppointments (GET /prescriptions/appointments)', () => {
+  it('returns 400 without a valid patientId', async () => {
+    const req = { session: { user: { id: 2, role: 'doctor' } }, query: {} } as unknown as Request;
+    const res = mockRes();
+    await controller.patientAppointments(req, res, next);
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('returns 200 with the appointments for the session doctor + given patient', async () => {
+    svc.listAppointmentsForIssue.mockResolvedValueOnce([{ id: 1 }] as never);
+    const req = { session: { user: { id: 2, role: 'doctor' } }, query: { patientId: '1' } } as unknown as Request;
+    const res = mockRes();
+    await controller.patientAppointments(req, res, next);
+    expect(res.statusCode).toBe(200);
+    expect(svc.listAppointmentsForIssue).toHaveBeenCalledWith(2, 1);
+  });
+});
+
+describe('listIssued (GET /prescriptions/issued)', () => {
+  it('returns 200 with the doctor\'s issued prescriptions (from the session id)', async () => {
+    svc.listForDoctor.mockResolvedValueOnce([{ id: 1, patient_name: 'Test Patient' }] as never);
+    const req = { session: { user: { id: 2, role: 'doctor' } } } as unknown as Request;
+    const res = mockRes();
+    await controller.listIssued(req, res, next);
+    expect(res.statusCode).toBe(200);
+    expect((res.body as Array<{ id: number }>)[0].id).toBe(1);
+    expect(svc.listForDoctor).toHaveBeenCalledWith(2);
   });
 });
 
@@ -145,6 +178,32 @@ describe('getOne (GET /prescriptions/:id)', () => {
     const res = mockRes();
     await controller.getOne(req, res, next);
     expect(res.statusCode).toBe(200);
+  });
+});
+
+describe('cancel (PATCH /prescriptions/:id/cancel)', () => {
+  const req = { session: { user: { id: 2, role: 'doctor' } }, params: { id: '9' } } as unknown as Request;
+
+  it('returns 200 when the cancel succeeds (calls service with id + session doctor id)', async () => {
+    svc.cancelPrescription.mockResolvedValueOnce(true);
+    const res = mockRes();
+    await controller.cancel(req, res, next);
+    expect(res.statusCode).toBe(200);
+    expect(svc.cancelPrescription).toHaveBeenCalledWith(9, 2);
+  });
+
+  it('returns 404 when not cancellable / not the owner', async () => {
+    svc.cancelPrescription.mockResolvedValueOnce(false);
+    const res = mockRes();
+    await controller.cancel(req, res, next);
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('returns 400 for a non-numeric id', async () => {
+    const badReq = { session: { user: { id: 2, role: 'doctor' } }, params: { id: 'x' } } as unknown as Request;
+    const res = mockRes();
+    await controller.cancel(badReq, res, next);
+    expect(res.statusCode).toBe(400);
   });
 });
 

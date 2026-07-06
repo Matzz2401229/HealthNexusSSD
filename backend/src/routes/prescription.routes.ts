@@ -32,11 +32,14 @@ router.use(requireAuth);
 router.get('/mine', requireRole('patient'), controller.listMine);
 router.get('/pharmacy', requireRole('pharmacist'), controller.pharmacyQueue);
 router.get('/patients', requireRole('doctor'), controller.myPatients);
+router.get('/issued', requireRole('doctor'), controller.listIssued);
+router.get('/appointments', requireRole('doctor'), controller.patientAppointments);
 
 router.post('/', requireRole('doctor'), validate(issueSchema), controller.issue);
 
 router.get('/:id', controller.getOne);
 router.get('/:id/download', controller.download);
+router.patch('/:id/cancel', requireRole('doctor'), controller.cancel);
 router.patch('/:id/fulfilment', requireRole('pharmacist'), validate(fulfilmentSchema), controller.updateFulfilment);
 
 export default router;
