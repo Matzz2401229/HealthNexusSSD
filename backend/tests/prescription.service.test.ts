@@ -175,6 +175,7 @@ describe('listForPatient (FSR3 own records + appointment context)', () => {
     const sql = mockExecute.mock.calls[0][0] as string;
     expect(sql).toMatch(/WHERE p\.patient_id = \?/i);
     expect(sql).toMatch(/LEFT JOIN appointment/i);
+    expect(sql).toMatch(/FROM diagnosis/i);   // pulls the appointment's diagnosis
     expect(mockExecute.mock.calls[0][1]).toEqual([5]);
   });
 });

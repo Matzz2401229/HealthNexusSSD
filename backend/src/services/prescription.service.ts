@@ -32,6 +32,7 @@ export interface Prescription {
   fulfilled_at: string | null;
   issued_at: string;
   appointment_at?: string | null; // scheduled_at of the linked appointment, when joined
+  diagnosis?: string | null;      // diagnosis remarks for the linked appointment, when joined
 }
 
 export interface IssueInput {
@@ -89,8 +90,14 @@ export async function listForPatient(patientId: number): Promise<Prescription[]>
   // patientId is the session user's id, not a URL parameter → no IDOR (FSR3).
   // LEFT JOIN the appointment so the patient can see which consultation each
   // prescription relates to (appointment_at is null for older/unlinked records).
+  // The diagnosis subquery pulls the most recent remark for the prescription's
+  // appointment, so the patient can see what the medication is for. It's their
+  // own record (no privacy concern), and the pharmacist query never joins this.
   return runQuery<Prescription>(
-    `SELECT p.*, a.scheduled_at AS appointment_at
+    `SELECT p.*, a.scheduled_at AS appointment_at,
+            (SELECT d.remarks FROM diagnosis d
+              WHERE d.appointment_id = p.appointment_id
+              ORDER BY d.created_at DESC LIMIT 1) AS diagnosis
        FROM prescription p
        LEFT JOIN appointment a ON a.id = p.appointment_id
       WHERE p.patient_id = ?

@@ -8,6 +8,7 @@ export interface Appointment {
     scheduled_at: string;
     status: string;
     created_at: string;
+    patient_name?: string; // joined for the doctor's schedule view
 }
 
 export interface Diagnosis {
@@ -130,10 +131,12 @@ export async function getPatientDiagnosis(appointmentId: number, patientId: numb
 // doctor view appointment schedule
 export async function getDoctorSchedule(doctorId: number): Promise<Appointment[]> {
     return query<Appointment>(
-        `SELECT id, patient_id, doctor_id, scheduled_at, status, created_at 
-         FROM appointment 
-         WHERE doctor_id = ? 
-         ORDER BY scheduled_at ASC`,
+        `SELECT a.id, a.patient_id, a.doctor_id, a.scheduled_at, a.status, a.created_at,
+                p.full_name AS patient_name
+         FROM appointment a
+         JOIN patient p ON p.id = a.patient_id
+         WHERE a.doctor_id = ?
+         ORDER BY a.scheduled_at ASC`,
         [doctorId] as unknown as Record<string, unknown>
     );
 }

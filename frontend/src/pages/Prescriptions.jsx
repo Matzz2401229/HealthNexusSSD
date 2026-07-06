@@ -69,6 +69,11 @@ export default function Prescriptions() {
                         From appointment on {new Date(p.appointment_at).toLocaleDateString()}
                       </p>
                     )}
+                    {p.diagnosis && (
+                      <p className="hn-text-muted" style={{ margin: '0.35rem 0 0', fontSize: '0.85rem' }}>
+                        Diagnosis: {p.diagnosis}
+                      </p>
+                    )}
                   </div>
                   <span
                     className="hn-badge"
