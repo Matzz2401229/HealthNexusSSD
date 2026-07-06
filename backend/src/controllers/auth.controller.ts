@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { AppError } from '../utils/AppError';
 import { validatePasswordPolicy } from '../utils/password';
+import { attachCsrfToken, clearCsrfToken } from '../middleware/csrf';
 import * as authService from '../services/auth.service';
 
 /**
@@ -121,6 +122,10 @@ export async function login(req: Request, res: Response): Promise<void> {
     req.session.save((err) => (err ? reject(err) : resolve()));
   });
 
+  // FSR12: issue the anti-CSRF token server-side, tied to the same moment a
+  // fresh session begins.
+  attachCsrfToken(res);
+
   res.status(200).json({ message: 'Login successful.', user: sessionUser });
 }
 
@@ -130,6 +135,7 @@ export async function logout(req: Request, res: Response): Promise<void> {
     req.session.destroy((err) => (err ? reject(err) : resolve()));
   });
   res.clearCookie('hn.sid');
+  clearCsrfToken(res);
   res.status(200).json({ message: 'Logged out.' });
 }
 
