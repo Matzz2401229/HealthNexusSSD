@@ -64,8 +64,8 @@ export async function registerPatient(
     await conn.beginTransaction();
 
     const [userResult] = await conn.execute<ResultSetHeader>(
-      `INSERT INTO users (email, password_hash, role, is_active)
-       VALUES (?, ?, 'patient', TRUE)`,
+      `INSERT INTO users (email, password_hash, role, is_active, approval_status)
+       VALUES (?, ?, 'patient', TRUE, 'approved')`,
       [email, passwordHash],
     );
     const userId = userResult.insertId;
@@ -101,8 +101,8 @@ export async function registerDoctor(
     await conn.beginTransaction();
 
     const [userResult] = await conn.execute<ResultSetHeader>(
-      `INSERT INTO users (email, password_hash, role, is_active)
-       VALUES (?, ?, 'doctor', FALSE)`,
+      `INSERT INTO users (email, password_hash, role, is_active, approval_status)
+       VALUES (?, ?, 'doctor', FALSE, 'pending')`,
       [email, passwordHash],
     );
     const userId = userResult.insertId;
@@ -139,8 +139,8 @@ export async function registerPharmacist(
     await conn.beginTransaction();
 
     const [userResult] = await conn.execute<ResultSetHeader>(
-      `INSERT INTO users (email, password_hash, role, is_active)
-       VALUES (?, ?, 'pharmacist', FALSE)`,
+      `INSERT INTO users (email, password_hash, role, is_active, approval_status)
+       VALUES (?, ?, 'pharmacist', FALSE, 'pending')`,
       [email, passwordHash],
     );
     const userId = userResult.insertId;

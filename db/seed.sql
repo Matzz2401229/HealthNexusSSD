@@ -80,13 +80,17 @@ VALUES
 
 -- --- Sample medical documents for patient 1 --------------------------
 -- These rows seed the document UI / API with realistic patient records.
--- NOTE: the files themselves are not created by SQL, so download testing is
--- still best done with an uploaded document from the app/API.
+-- Only records uploaded by the patient should expose the patient-side delete
+-- action in the UI. Clinician-authored records are therefore seeded with the
+-- doctor as uploader.
+-- Generate matching local PDF files after loading this seed:
+--
+--   docker compose exec backend npm run seed:documents
 INSERT INTO medical_document
   (id, patient_id, uploaded_by, stored_name, original_name, mime_type, size_bytes, sha256, category, description, status)
 VALUES
   (
-    1, 1, 1,
+    1, 1, 2,
     '11111111-1111-1111-1111-111111111111.pdf',
     'Full Blood Count Report - 12 Mar 2026.pdf',
     'application/pdf',
@@ -97,7 +101,7 @@ VALUES
     'active'
   ),
   (
-    2, 1, 1,
+    2, 1, 2,
     '22222222-2222-2222-2222-222222222222.pdf',
     'Specialist Referral Letter - Cardiology.pdf',
     'application/pdf',
@@ -108,7 +112,7 @@ VALUES
     'active'
   ),
   (
-    3, 1, 1,
+    3, 1, 2,
     '33333333-3333-3333-3333-333333333333.pdf',
     'Chest X-Ray Summary - Follow-up.pdf',
     'application/pdf',
@@ -119,7 +123,7 @@ VALUES
     'active'
   ),
   (
-    4, 1, 1,
+    4, 1, 2,
     '44444444-4444-4444-4444-444444444444.pdf',
     'HbA1c Monitoring Result - 02 Apr 2026.pdf',
     'application/pdf',
@@ -141,7 +145,7 @@ VALUES
     'active'
   ),
   (
-    6, 1, 1,
+    6, 1, 2,
     '66666666-6666-6666-6666-666666666666.pdf',
     'Respiratory Medication Review - May 2026.pdf',
     'application/pdf',

@@ -33,6 +33,7 @@ export function devAuth(req: Request, _res: Response, next: NextFunction): void 
     id: userId,
     role: roleHeader as Role,
     status: 'active',
+    loginAt: Date.now(),
   };
 
   next();

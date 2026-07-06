@@ -23,6 +23,8 @@ export const documentIdParamsSchema = z.object({
   documentId: z.coerce.number().int().positive(),
 });
 
+export const deleteDocumentParamsSchema = documentIdParamsSchema;
+
 export const createDocumentRequestBodySchema = z.object({
   reason: z.string().trim().min(1).max(500).optional(),
 });

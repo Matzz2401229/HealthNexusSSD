@@ -2,6 +2,7 @@ import fs from 'fs';
 import { Request, Response, NextFunction } from 'express';
 import {
   createDocumentRequestBodySchema,
+  deleteDocumentParamsSchema,
   documentIdParamsSchema,
   listDocumentRequestsQuerySchema,
   listDocumentsQuerySchema,
@@ -40,6 +41,7 @@ export async function uploadDocument(req: Request, res: Response, next: NextFunc
       description: headers['x-document-description'],
       buffer,
       uploadedBy: user.id,
+      actorRole: user.role,
     });
 
     res.status(201).json(document);
@@ -90,6 +92,26 @@ export async function downloadDocument(req: Request, res: Response, next: NextFu
   }
 }
 
+export async function previewDocument(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const user = assertUser(req);
+    const params = documentIdParamsSchema.parse(req.params);
+    const file = await documentService.getDocumentPreview(user.id, user.role, params.documentId);
+
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Content-Length', String(file.sizeBytes));
+    res.setHeader('Content-Disposition', `inline; filename="${file.originalName}"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+
+    const stream = fs.createReadStream(file.path);
+    stream.on('error', next);
+    stream.pipe(res);
+  } catch (err) {
+    handleDocumentError(err, next);
+  }
+}
+
 export async function createRequest(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const user = assertUser(req);
@@ -103,6 +125,22 @@ export async function createRequest(req: Request, res: Response, next: NextFunct
     });
 
     res.status(201).json(requestRecord);
+  } catch (err) {
+    handleDocumentError(err, next);
+  }
+}
+
+export async function deleteDocument(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const user = assertUser(req);
+    const params = deleteDocumentParamsSchema.parse(req.params);
+    const deleted = await documentService.deleteDocument({
+      documentId: params.documentId,
+      actorId: user.id,
+      actorRole: user.role,
+    });
+
+    res.json(deleted);
   } catch (err) {
     handleDocumentError(err, next);
   }

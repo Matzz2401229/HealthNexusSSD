@@ -41,6 +41,7 @@ export interface UploadDocumentInput {
   description?: string;
   buffer: Buffer;
   uploadedBy: number;
+  actorRole: Role;
 }
 
 export interface CreateDocumentRequestInput {
@@ -55,4 +56,10 @@ export interface ReviewDocumentRequestInput {
   reviewerId: number;
   reviewerRole: Role;
   status: Extract<DocumentRequestStatus, 'approved' | 'denied' | 'revoked'>;
+}
+
+export interface DeleteDocumentInput {
+  documentId: number;
+  actorId: number;
+  actorRole: Role;
 }

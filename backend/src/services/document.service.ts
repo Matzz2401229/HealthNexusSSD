@@ -9,6 +9,7 @@ import { recordAudit } from './audit.service';
 import { AppError } from '../utils/AppError';
 import {
   CreateDocumentRequestInput,
+  DeleteDocumentInput,
   DocumentRecord,
   DocumentRequestRecord,
   DocumentRequestStatus,
@@ -69,6 +70,10 @@ function isPrivileged(role: Role): boolean {
   return role === 'doctor' || role === 'admin';
 }
 
+function canUploadForRole(role: Role): boolean {
+  return role === 'patient' || role === 'doctor';
+}
+
 async function findDocumentById(documentId: number): Promise<DocumentRecord | null> {
   const rows = await query<DocumentRecord>(
     `SELECT id, patient_id, uploaded_by, stored_name, original_name, mime_type, size_bytes,
@@ -79,6 +84,20 @@ async function findDocumentById(documentId: number): Promise<DocumentRecord | nu
   );
 
   return rows[0] ?? null;
+}
+
+async function assertStoredFileExists(storedName: string): Promise<{ path: string; sizeBytes: number }> {
+  const filePath = absoluteStoredPath(storedName);
+
+  try {
+    const stats = await fs.stat(filePath);
+    return {
+      path: filePath,
+      sizeBytes: stats.size,
+    };
+  } catch {
+    throw new DocumentAccessError('File not found for this document.', 404);
+  }
 }
 
 async function findRequestById(requestId: number): Promise<DocumentRequestRecord | null> {
@@ -107,6 +126,20 @@ async function hasApprovedRequest(documentId: number, requesterId: number): Prom
   return rows.length > 0;
 }
 
+async function hasActiveDoctorPatientAuth(doctorId: number, patientId: number): Promise<boolean> {
+  const rows = await query<{ id: number }>(
+    `SELECT id
+       FROM doctor_patient_auth
+      WHERE doctor_id = :doctorId
+        AND patient_id = :patientId
+        AND revoked_at IS NULL
+      LIMIT 1`,
+    { doctorId, patientId },
+  );
+
+  return rows.length > 0;
+}
+
 async function assertCanAccessDocument(
   actorId: number,
   actorRole: Role,
@@ -118,6 +151,7 @@ async function assertCanAccessDocument(
 
   if (actorRole === 'patient' && actorId === document.patient_id) return;
   if (actorRole === 'admin') return;
+  if ((actorRole === 'doctor' || actorRole === 'pharmacist') && actorId === document.uploaded_by) return;
 
   if (actorRole === 'doctor' || actorRole === 'pharmacist') {
     if (await hasApprovedRequest(document.id, actorId)) return;
@@ -171,8 +205,19 @@ async function assertCanReviewRequest(
 }
 
 export async function uploadDocument(input: UploadDocumentInput) {
-  if (input.uploadedBy !== input.patientId) {
-    throw new DocumentAccessError('Patients may only upload their own documents for now.', 403);
+  if (!canUploadForRole(input.actorRole)) {
+    throw new DocumentAccessError('Forbidden.', 403);
+  }
+
+  if (input.actorRole === 'patient' && input.uploadedBy !== input.patientId) {
+    throw new DocumentAccessError('Patients may only upload their own documents.', 403);
+  }
+
+  if (input.actorRole === 'doctor') {
+    const isAuthorized = await hasActiveDoctorPatientAuth(input.uploadedBy, input.patientId);
+    if (!isAuthorized) {
+      throw new DocumentAccessError('Doctors may only upload documents for authorised patients.', 403);
+    }
   }
 
   const validation = validateUpload(input.originalName, input.buffer);
@@ -220,7 +265,7 @@ export async function uploadDocument(input: UploadDocumentInput) {
     const document = rows[0];
     await recordAudit({
       userId: input.uploadedBy,
-      role: 'patient',
+      role: input.actorRole,
       action: 'document.upload',
       target: String(document.id),
       result: 'success',
@@ -231,7 +276,7 @@ export async function uploadDocument(input: UploadDocumentInput) {
     await fs.rm(storedPath, { force: true });
     await recordAudit({
       userId: input.uploadedBy,
-      role: 'patient',
+      role: input.actorRole,
       action: 'document.upload',
       target: input.originalName,
       result: 'failure',
@@ -241,24 +286,47 @@ export async function uploadDocument(input: UploadDocumentInput) {
 }
 
 export async function listDocuments(actorId: number, actorRole: Role, patientId?: number) {
-  const targetPatientId = actorRole === 'patient' ? actorId : patientId;
-  if (!targetPatientId) {
-    throw new DocumentAccessError('patientId is required for staff document listing.', 400);
-  }
+  let rows: DocumentRecord[];
 
-  if (actorRole !== 'patient') {
-    throw new DocumentAccessError('Staff-wide document listing is blocked until ownership integration is finished.', 403);
-  }
+  if (actorRole === 'patient') {
+    rows = await query<DocumentRecord>(
+      `SELECT id, patient_id, uploaded_by, stored_name, original_name, mime_type, size_bytes,
+              sha256, category, description, status, created_at, updated_at
+         FROM medical_document
+        WHERE patient_id = :patientId
+          AND status = 'active'
+        ORDER BY created_at DESC`,
+      { patientId: actorId },
+    );
+  } else if (actorRole === 'doctor' && patientId) {
+    const isAuthorized = await hasActiveDoctorPatientAuth(actorId, patientId);
+    if (!isAuthorized) {
+      throw new DocumentAccessError('Forbidden.', 403);
+    }
 
-  const rows = await query<DocumentRecord>(
-    `SELECT id, patient_id, uploaded_by, stored_name, original_name, mime_type, size_bytes,
-            sha256, category, description, status, created_at, updated_at
-       FROM medical_document
-      WHERE patient_id = :patientId
-        AND status = 'active'
-      ORDER BY created_at DESC`,
-    { patientId: targetPatientId },
-  );
+    rows = await query<DocumentRecord>(
+      `SELECT id, patient_id, uploaded_by, stored_name, original_name, mime_type, size_bytes,
+              sha256, category, description, status, created_at, updated_at
+         FROM medical_document
+        WHERE patient_id = :patientId
+          AND uploaded_by = :actorId
+          AND status = 'active'
+        ORDER BY created_at DESC`,
+      { patientId, actorId },
+    );
+  } else if (actorRole === 'doctor') {
+    rows = await query<DocumentRecord>(
+      `SELECT id, patient_id, uploaded_by, stored_name, original_name, mime_type, size_bytes,
+              sha256, category, description, status, created_at, updated_at
+         FROM medical_document
+        WHERE uploaded_by = :actorId
+          AND status = 'active'
+        ORDER BY created_at DESC`,
+      { actorId },
+    );
+  } else {
+    rows = [];
+  }
 
   return rows.map(toDocumentView);
 }
@@ -280,6 +348,7 @@ export async function getDocumentDownload(actorId: number, actorRole: Role, docu
   }
 
   await assertCanAccessDocument(actorId, actorRole, document);
+  const storedFile = await assertStoredFileExists(document.stored_name);
 
   await recordAudit({
     userId: actorId,
@@ -290,10 +359,35 @@ export async function getDocumentDownload(actorId: number, actorRole: Role, docu
   });
 
   return {
-    path: absoluteStoredPath(document.stored_name),
+    path: storedFile.path,
     mimeType: document.mime_type,
     originalName: document.original_name,
-    sizeBytes: document.size_bytes,
+    sizeBytes: storedFile.sizeBytes,
+  };
+}
+
+export async function getDocumentPreview(actorId: number, actorRole: Role, documentId: number) {
+  const document = await findDocumentById(documentId);
+  if (!document) {
+    throw new DocumentAccessError('Not found.', 404);
+  }
+
+  await assertCanAccessDocument(actorId, actorRole, document);
+  const storedFile = await assertStoredFileExists(document.stored_name);
+
+  await recordAudit({
+    userId: actorId,
+    role: actorRole,
+    action: 'document.preview',
+    target: String(document.id),
+    result: 'success',
+  });
+
+  return {
+    path: storedFile.path,
+    mimeType: document.mime_type,
+    originalName: document.original_name,
+    sizeBytes: storedFile.sizeBytes,
   };
 }
 
@@ -410,4 +504,65 @@ export async function reviewDocumentRequest(input: ReviewDocumentRequestInput) {
   });
 
   return toRequestView(updated as DocumentRequestRecord);
+}
+
+export async function deleteDocument(input: DeleteDocumentInput) {
+  const document = await findDocumentById(input.documentId);
+  if (!document) {
+    throw new DocumentAccessError('Not found.', 404);
+  }
+
+  if (document.status !== 'active') {
+    throw new DocumentAccessError('Only active documents can be removed.', 409);
+  }
+
+  if (document.uploaded_by !== input.actorId) {
+    throw new DocumentAccessError('You may only remove documents you uploaded.', 403);
+  }
+
+  if (input.actorRole === 'patient' && document.patient_id !== input.actorId) {
+    throw new DocumentAccessError('Forbidden.', 403);
+  }
+
+  if (input.actorRole === 'doctor') {
+    const isAuthorized = await hasActiveDoctorPatientAuth(input.actorId, document.patient_id);
+    if (!isAuthorized) {
+      throw new DocumentAccessError('Forbidden.', 403);
+    }
+  }
+
+  if (input.actorRole !== 'patient' && input.actorRole !== 'doctor') {
+    throw new DocumentAccessError('Forbidden.', 403);
+  }
+
+  const pending = await query<{ id: number }>(
+    `SELECT id
+       FROM document_request
+      WHERE document_id = :documentId
+        AND status = 'pending'
+      LIMIT 1`,
+    { documentId: input.documentId },
+  );
+
+  if (pending.length > 0) {
+    throw new DocumentAccessError('Documents with pending access requests cannot be deleted.', 409);
+  }
+
+  await query(
+    `UPDATE medical_document
+        SET status = 'deleted'
+      WHERE id = :documentId`,
+    { documentId: input.documentId },
+  );
+
+  await recordAudit({
+    userId: input.actorId,
+    role: input.actorRole,
+    action: 'document.delete',
+    target: String(input.documentId),
+    result: 'success',
+  });
+
+  const updated = await findDocumentById(input.documentId);
+  return toDocumentView(updated as DocumentRecord);
 }

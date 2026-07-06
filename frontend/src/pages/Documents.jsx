@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { apiDownload, apiGet, apiPatch, apiPost, apiUploadRaw } from '../lib/api';
+import { apiDelete, apiGet, apiPost, apiUploadRaw } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 
 const CATEGORY_OPTIONS = [
@@ -110,16 +110,28 @@ function SummaryCard({ label, value, hint }) {
   );
 }
 
+function openDocumentUrl(path, target = '_self') {
+  const link = document.createElement('a');
+  const separator = path.includes('?') ? '&' : '?';
+  link.href = `${path}${separator}t=${Date.now()}`;
+  link.target = target;
+  link.rel = 'noopener';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
 export default function Documents() {
   const { user } = useAuth();
   const roleCopy = ROLE_COPY[user.role] ?? ROLE_COPY.patient;
   const isPatient = user.role === 'patient';
-  const canRequest = user.role === 'doctor' || user.role === 'pharmacist' || user.role === 'admin';
+  const isDoctor = user.role === 'doctor';
+  const canUpload = isPatient || isDoctor;
 
   const [documents, setDocuments] = useState([]);
   const [requests, setRequests] = useState([]);
-  const [selectedDocument, setSelectedDocument] = useState(null);
   const [uploadForm, setUploadForm] = useState({
+    patientId: '',
     file: null,
     category: 'general',
     description: '',
@@ -153,13 +165,13 @@ export default function Documents() {
   );
 
   async function refreshDocuments() {
-    if (!isPatient) return;
-    const data = await apiGet('/documents');
+    if (!isPatient && !isDoctor) return;
+    const path = isDoctor && uploadForm.patientId.trim()
+      ? `/documents?patientId=${encodeURIComponent(uploadForm.patientId.trim())}`
+      : '/documents';
+    const data = await apiGet(path);
     const items = data.items || [];
     setDocuments(items);
-    if (items.length > 0 && !selectedDocument) {
-      setSelectedDocument(items[0]);
-    }
   }
 
   async function refreshRequests() {
@@ -175,7 +187,7 @@ export default function Documents() {
         setBusy(true);
         setError('');
         const tasks = [refreshRequests()];
-        if (isPatient) tasks.unshift(refreshDocuments());
+        if (isPatient || isDoctor) tasks.unshift(refreshDocuments());
         await Promise.all(tasks);
       } catch (err) {
         if (active) setError(err.message || 'Unable to load medical documents.');
@@ -188,7 +200,7 @@ export default function Documents() {
     return () => {
       active = false;
     };
-  }, [isPatient]);
+  }, [isDoctor, isPatient]);
 
   async function onUpload(e) {
     e.preventDefault();
@@ -205,15 +217,39 @@ export default function Documents() {
         'x-file-name': uploadForm.file.name,
         'x-document-category': uploadForm.category,
         'x-document-description': uploadForm.description,
+        ...(isDoctor ? { 'x-patient-id': uploadForm.patientId.trim() } : {}),
       });
       await refreshDocuments();
-      setSelectedDocument(created);
-      setUploadForm({ file: null, category: 'general', description: '' });
+      setUploadForm((prev) => ({
+        patientId: isDoctor ? prev.patientId : '',
+        file: null,
+        category: 'general',
+        description: '',
+      }));
       const input = document.getElementById('document-upload-input');
       if (input) input.value = '';
       setNotice('Document uploaded successfully.');
     } catch (err) {
       setError(err.message || 'Upload failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onDeleteDocument(documentId) {
+    const confirmed = window.confirm('Remove this uploaded document from the active record list?');
+    if (!confirmed) return;
+
+    try {
+      setBusy(true);
+      setError('');
+      setNotice('');
+      await apiDelete(`/documents/${documentId}`);
+      await refreshDocuments();
+      await refreshRequests();
+      setNotice(`Document #${documentId} removed from the active record list.`);
+    } catch (err) {
+      setError(err.message || 'Unable to remove the document.');
     } finally {
       setBusy(false);
     }
@@ -244,57 +280,16 @@ export default function Documents() {
     }
   }
 
-  async function onReviewRequest(requestId, status) {
-    try {
-      setBusy(true);
-      setError('');
-      setNotice('');
-      await apiPatch(`/documents/requests/${requestId}`, { status });
-      await refreshRequests();
-      setNotice(`Request #${requestId} updated to ${status}.`);
-    } catch (err) {
-      setError(err.message || 'Unable to update the request.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onOpenDocument(documentId) {
-    try {
-      setBusy(true);
-      setError('');
-      setNotice('');
-      const document = await apiGet(`/documents/${documentId}`);
-      setSelectedDocument(document);
-      setNotice(`Record loaded.`);
-    } catch (err) {
-      setSelectedDocument(null);
-      setError(err.message || 'Unable to open the selected record.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function onDownload(documentId) {
-    try {
-      setBusy(true);
-      setError('');
-      setNotice('');
-      const file = await apiDownload(`/documents/${documentId}/download`);
-      const url = window.URL.createObjectURL(file.blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = file.filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      setNotice(`Downloading ${file.filename}.`);
-    } catch (err) {
-      setError(err.message || 'Download failed.');
-    } finally {
-      setBusy(false);
-    }
+    setError('');
+    setNotice('Starting document download.');
+    openDocumentUrl(`/api/documents/${documentId}/download`);
+  }
+
+  function onPreview(documentId) {
+    setError('');
+    setNotice('Opening document preview.');
+    openDocumentUrl(`/api/documents/${documentId}/preview`, '_blank');
   }
 
   return (
@@ -323,7 +318,7 @@ export default function Documents() {
         <>
           <div className="hn-doc-summary-grid" style={{ marginTop: '1.5rem' }}>
             <SummaryCard label="Records" value={documents.length} hint="Stored in your account" />
-            <SummaryCard label="Pending Requests" value={pendingRequests.length} hint="Awaiting your approval" />
+            <SummaryCard label="Pending Requests" value={pendingRequests.length} hint="Awaiting review in the system" />
             <SummaryCard label="Shared Records" value={sharedRecordsCount} hint="Currently released to staff" />
           </div>
 
@@ -331,7 +326,7 @@ export default function Documents() {
             <section className="hn-card">
               <h2 style={{ marginTop: 0 }}>My Records</h2>
               <p className="hn-text-muted" style={{ marginTop: '0.35rem' }}>
-                View documents attached to your personal health record and open a document to see more details.
+                View documents attached to your personal health record and access only the files stored under your account.
               </p>
 
               <div className="hn-table-wrap">
@@ -356,12 +351,17 @@ export default function Documents() {
                           <td>{isShared ? 'Shared with care team' : 'Private to you'}</td>
                           <td>
                             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                              <button type="button" className="hn-btn hn-btn-outline" onClick={() => setSelectedDocument(doc)}>
-                                View
+                              <button type="button" className="hn-btn hn-btn-outline" onClick={() => onPreview(doc.id)}>
+                                Preview PDF
                               </button>
                               <button type="button" className="hn-btn hn-btn-primary" onClick={() => onDownload(doc.id)}>
                                 Download
                               </button>
+                              {doc.uploadedBy === user.id && (
+                                <button type="button" className="hn-btn hn-btn-outline" onClick={() => onDeleteDocument(doc.id)}>
+                                  Delete
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -376,81 +376,9 @@ export default function Documents() {
                 </table>
               </div>
             </section>
-
-            <section className="hn-card">
-              <h2 style={{ marginTop: 0 }}>Pending Access Requests</h2>
-              <p className="hn-text-muted" style={{ marginTop: '0.35rem' }}>
-                Review new requests from healthcare staff before a document is shared outside your account.
-              </p>
-
-              {pendingRequests.length === 0 ? (
-                <div className="hn-empty-state">
-                  <strong>No pending decisions</strong>
-                  <p className="hn-text-muted" style={{ margin: '0.5rem 0 0' }}>
-                    There are currently no new access requests waiting for your approval.
-                  </p>
-                </div>
-              ) : (
-                <div style={{ display: 'grid', gap: '0.9rem' }}>
-                  {pendingRequests.map((item) => (
-                    <div key={item.id} className="hn-request-card">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'start' }}>
-                        <div>
-                          <strong>{safeRoleName(item.requestedRole)} request</strong>
-                          <div className="hn-text-muted" style={{ marginTop: '0.25rem' }}>
-                            Record #{item.documentId}
-                          </div>
-                        </div>
-                        <StatusPill status={item.status} />
-                      </div>
-                      <p style={{ margin: '0.85rem 0 0.6rem' }}>{item.reason || 'No reason provided.'}</p>
-                      <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-                        <button type="button" className="hn-btn hn-btn-primary" onClick={() => onReviewRequest(item.id, 'approved')}>
-                          Approve
-                        </button>
-                        <button type="button" className="hn-btn hn-btn-outline" onClick={() => onReviewRequest(item.id, 'denied')}>
-                          Deny
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
           </div>
 
           <div className="hn-doc-grid hn-doc-grid-patient-secondary" style={{ marginTop: '1.5rem' }}>
-            <section className="hn-card">
-              <h2 style={{ marginTop: 0 }}>Document Details</h2>
-              <p className="hn-text-muted" style={{ marginTop: '0.35rem' }}>
-                Review the selected document before downloading or responding to related access requests.
-              </p>
-
-              {selectedDocument ? (
-                <div className="hn-doc-detail-list">
-                  <div><strong>Document name:</strong> {selectedDocument.originalName}</div>
-                  <div><strong>Type:</strong> {formatCategory(selectedDocument.category)}</div>
-                  <div><strong>Date added:</strong> {formatDateTime(selectedDocument.createdAt)}</div>
-                  <div><strong>Status:</strong> <StatusPill status={selectedDocument.status} /></div>
-                  <div><strong>File size:</strong> {selectedDocument.sizeBytes.toLocaleString()} bytes</div>
-                  <div><strong>Notes:</strong> {selectedDocument.description || 'No notes provided.'}</div>
-
-                  <div style={{ marginTop: '1rem' }}>
-                    <button type="button" className="hn-btn hn-btn-primary" onClick={() => onDownload(selectedDocument.id)}>
-                      Download document
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="hn-empty-state">
-                  <strong>No document selected</strong>
-                  <p className="hn-text-muted" style={{ margin: '0.5rem 0 0' }}>
-                    Choose one of your records to review its details.
-                  </p>
-                </div>
-              )}
-            </section>
-
             <section className="hn-card">
               <h2 style={{ marginTop: 0 }}>Add New Record</h2>
               <p className="hn-text-muted" style={{ marginTop: '0.35rem' }}>
@@ -501,6 +429,41 @@ export default function Documents() {
                 </button>
               </form>
             </section>
+
+            <section className="hn-card">
+              <h2 style={{ marginTop: 0 }}>Sharing History</h2>
+              <p className="hn-text-muted" style={{ marginTop: '0.35rem' }}>
+                Review which records have been requested or released to other roles in the care workflow.
+              </p>
+
+              <div className="hn-table-wrap">
+                <table className="hn-table">
+                  <thead>
+                    <tr>
+                      <th>Document</th>
+                      <th>Requester</th>
+                      <th>Status</th>
+                      <th>Reviewed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {requests.map((item) => (
+                      <tr key={item.id}>
+                        <td>Record #{item.documentId}</td>
+                        <td>{safeRoleName(item.requestedRole)}</td>
+                        <td><StatusPill status={item.status} /></td>
+                        <td>{formatDate(item.reviewedAt)}</td>
+                      </tr>
+                    ))}
+                    {requests.length === 0 && (
+                      <tr>
+                        <td colSpan="4" className="hn-text-muted">No sharing activity available.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
 
           <section className="hn-card" style={{ marginTop: '1.5rem' }}>
@@ -540,76 +503,148 @@ export default function Documents() {
         </>
       ) : (
         <>
+          <div className="hn-doc-summary-grid" style={{ marginTop: '1.5rem' }}>
+            <SummaryCard label="Released Records" value={releasedRequests.length} hint="Accessible to your account" />
+            <SummaryCard label="Pending Requests" value={pendingRequests.length} hint="Awaiting patient or admin review" />
+            <SummaryCard label="Closed Requests" value={closedRequests.length} hint="Approved, denied, or revoked" />
+          </div>
+
           <div className="hn-doc-grid" style={{ marginTop: '1.5rem' }}>
             <section className="hn-card">
-              <h2 style={{ marginTop: 0 }}>Request Record Access</h2>
+              <h2 style={{ marginTop: 0 }}>{isDoctor ? 'Upload Clinical Document' : 'Request Record Access'}</h2>
               <p className="hn-text-muted" style={{ marginTop: '0.35rem' }}>
-                Request access only for records required to support treatment, dispensing, or approved operational review.
+                {isDoctor
+                  ? 'Upload clinician-authored documents only for patients you are authorised to treat.'
+                  : 'Request access only for records required to support treatment, dispensing, or approved operational review.'}
               </p>
 
-              <form onSubmit={onCreateRequest}>
-                <div className="hn-doc-request-form">
-                  <div className="hn-field" style={{ marginBottom: 0 }}>
-                    <label className="hn-label" htmlFor="request-document-id">Record ID</label>
+              {isDoctor ? (
+                <form onSubmit={onUpload}>
+                  <div className="hn-field">
+                    <label className="hn-label" htmlFor="doctor-upload-patient-id">Patient ID</label>
                     <input
-                      id="request-document-id"
+                      id="doctor-upload-patient-id"
                       className="hn-input"
-                      value={requestForm.documentId}
-                      onChange={(e) => setRequestForm((prev) => ({ ...prev, documentId: e.target.value }))}
+                      value={uploadForm.patientId}
+                      onChange={(e) => setUploadForm((prev) => ({ ...prev, patientId: e.target.value }))}
+                      placeholder="Enter authorised patient ID"
                     />
                   </div>
-                  <div className="hn-field" style={{ marginBottom: 0 }}>
-                    <label className="hn-label" htmlFor="request-reason">Access reason</label>
+
+                  <div className="hn-field">
+                    <label className="hn-label" htmlFor="document-upload-input">Choose file</label>
                     <input
-                      id="request-reason"
+                      id="document-upload-input"
                       className="hn-input"
-                      value={requestForm.reason}
-                      onChange={(e) => setRequestForm((prev) => ({ ...prev, reason: e.target.value }))}
-                      placeholder="State why this record is required"
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      onChange={(e) => setUploadForm((prev) => ({ ...prev, file: e.target.files?.[0] || null }))}
+                    />
+                    <p className="hn-hint">Accepted formats: PDF, PNG, JPG, JPEG</p>
+                  </div>
+
+                  <div className="hn-field">
+                    <label className="hn-label" htmlFor="doctor-document-category">Document type</label>
+                    <select
+                      id="doctor-document-category"
+                      className="hn-select"
+                      value={uploadForm.category}
+                      onChange={(e) => setUploadForm((prev) => ({ ...prev, category: e.target.value }))}
+                    >
+                      {CATEGORY_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="hn-field">
+                    <label className="hn-label" htmlFor="doctor-document-description">Clinical note</label>
+                    <input
+                      id="doctor-document-description"
+                      className="hn-input"
+                      type="text"
+                      placeholder="Add clinical context for this upload"
+                      value={uploadForm.description}
+                      onChange={(e) => setUploadForm((prev) => ({ ...prev, description: e.target.value }))}
                     />
                   </div>
-                  <button type="submit" className="hn-btn hn-btn-primary" disabled={busy}>Submit request</button>
-                </div>
-              </form>
+
+                  <button type="submit" className="hn-btn hn-btn-primary" disabled={busy}>
+                    {busy ? 'Uploading…' : 'Upload document'}
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={onCreateRequest}>
+                  <div className="hn-doc-request-form">
+                    <div className="hn-field" style={{ marginBottom: 0 }}>
+                      <label className="hn-label" htmlFor="request-document-id">Record ID</label>
+                      <input
+                        id="request-document-id"
+                        className="hn-input"
+                        value={requestForm.documentId}
+                        onChange={(e) => setRequestForm((prev) => ({ ...prev, documentId: e.target.value }))}
+                      />
+                    </div>
+                    <div className="hn-field" style={{ marginBottom: 0 }}>
+                      <label className="hn-label" htmlFor="request-reason">Access reason</label>
+                      <input
+                        id="request-reason"
+                        className="hn-input"
+                        value={requestForm.reason}
+                        onChange={(e) => setRequestForm((prev) => ({ ...prev, reason: e.target.value }))}
+                        placeholder="State why this record is required"
+                      />
+                    </div>
+                    <button type="submit" className="hn-btn hn-btn-primary" disabled={busy}>Submit request</button>
+                  </div>
+                </form>
+              )}
             </section>
 
             <section className="hn-card">
-              <h2 style={{ marginTop: 0 }}>Released Records</h2>
+              <h2 style={{ marginTop: 0 }}>{isDoctor ? 'My Uploaded Records' : 'Released Records'}</h2>
               <p className="hn-text-muted" style={{ marginTop: '0.35rem' }}>
-                {getRequestAccessSummary(user, requests)}
+                {isDoctor
+                  ? 'These are the active documents you uploaded yourself. You can preview, download, or remove only your own uploads.'
+                  : getRequestAccessSummary(user, requests)}
               </p>
 
               <div className="hn-table-wrap">
                 <table className="hn-table">
                   <thead>
                     <tr>
-                      <th>Record</th>
-                      <th>Released To</th>
-                      <th>Status</th>
-                      <th>Reviewed</th>
+                      <th>{isDoctor ? 'Document' : 'Record'}</th>
+                      <th>{isDoctor ? 'Patient ID' : 'Released To'}</th>
+                      <th>{isDoctor ? 'Type' : 'Status'}</th>
+                      <th>{isDoctor ? 'Uploaded' : 'Reviewed'}</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {releasedRequests.map((item) => (
+                    {(isDoctor ? documents : releasedRequests).map((item) => (
                       <tr key={item.id}>
-                        <td>#{item.documentId}</td>
-                        <td>{safeRoleName(item.requestedRole)}</td>
-                        <td><StatusPill status={item.status} /></td>
-                        <td>{formatDate(item.reviewedAt)}</td>
+                        <td>{isDoctor ? item.originalName : `#${item.documentId}`}</td>
+                        <td>{isDoctor ? `#${item.patientId}` : safeRoleName(item.requestedRole)}</td>
+                        <td>{isDoctor ? formatCategory(item.category) : <StatusPill status={item.status} />}</td>
+                        <td>{isDoctor ? formatDate(item.createdAt) : formatDate(item.reviewedAt)}</td>
                         <td>
                           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            <button type="button" className="hn-btn hn-btn-outline" onClick={() => onOpenDocument(item.documentId)}>
-                              Open
+                            <button type="button" className="hn-btn hn-btn-outline" onClick={() => onPreview(isDoctor ? item.id : item.documentId)}>
+                              Preview PDF
                             </button>
-                            <button type="button" className="hn-btn hn-btn-primary" onClick={() => onDownload(item.documentId)}>
+                            <button type="button" className="hn-btn hn-btn-primary" onClick={() => onDownload(isDoctor ? item.id : item.documentId)}>
                               Download
                             </button>
+                            {isDoctor && item.uploadedBy === user.id && (
+                              <button type="button" className="hn-btn hn-btn-outline" onClick={() => onDeleteDocument(item.id)}>
+                                Delete
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
                     ))}
-                    {releasedRequests.length === 0 && (
+                    {(isDoctor ? documents.length === 0 : releasedRequests.length === 0) && (
                       <tr>
                         <td colSpan="5" className="hn-text-muted">No records have been released to your account.</td>
                       </tr>
@@ -620,77 +655,78 @@ export default function Documents() {
             </section>
           </div>
 
-          <div className="hn-doc-grid" style={{ marginTop: '1.5rem' }}>
-            <section className="hn-card">
-              <h2 style={{ marginTop: 0 }}>My Requests</h2>
+          {isDoctor && (
+            <section className="hn-card" style={{ marginTop: '1.5rem' }}>
+              <h2 style={{ marginTop: 0 }}>Request Record Access</h2>
               <p className="hn-text-muted" style={{ marginTop: '0.35rem' }}>
-                Only requests submitted from your own account appear here.
+                Request access only when you need to view documents that were not uploaded by your own account.
               </p>
 
-              <div className="hn-table-wrap">
-                <table className="hn-table">
-                  <thead>
-                    <tr>
-                      <th>Request</th>
-                      <th>Record</th>
-                      <th>Submitted As</th>
-                      <th>Status</th>
-                      <th>Reason</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {requests.map((item) => (
-                      <tr key={item.id}>
-                        <td>#{item.id}</td>
-                        <td>#{item.documentId}</td>
-                        <td>{safeRoleName(item.requestedRole)}</td>
-                        <td><StatusPill status={item.status} /></td>
-                        <td>{item.reason || 'No reason recorded'}</td>
-                      </tr>
-                    ))}
-                    {requests.length === 0 && (
-                      <tr>
-                        <td colSpan="5" className="hn-text-muted">
-                          {busy ? 'Loading requests…' : 'No requests available.'}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="hn-card">
-              <h2 style={{ marginTop: 0 }}>Document Details</h2>
-              <p className="hn-text-muted" style={{ marginTop: '0.35rem' }}>
-                View metadata for a released record before downloading.
-              </p>
-
-              {selectedDocument ? (
-                <div className="hn-doc-detail-list">
-                  <div><strong>Document name:</strong> {selectedDocument.originalName}</div>
-                  <div><strong>Type:</strong> {formatCategory(selectedDocument.category)}</div>
-                  <div><strong>Date added:</strong> {formatDateTime(selectedDocument.createdAt)}</div>
-                  <div><strong>Status:</strong> <StatusPill status={selectedDocument.status} /></div>
-                  <div><strong>File size:</strong> {selectedDocument.sizeBytes.toLocaleString()} bytes</div>
-                  <div><strong>Notes:</strong> {selectedDocument.description || 'No notes provided.'}</div>
-
-                  <div style={{ marginTop: '1rem' }}>
-                    <button type="button" className="hn-btn hn-btn-primary" onClick={() => onDownload(selectedDocument.id)}>
-                      Download document
-                    </button>
+              <form onSubmit={onCreateRequest}>
+                <div className="hn-doc-request-form">
+                  <div className="hn-field" style={{ marginBottom: 0 }}>
+                    <label className="hn-label" htmlFor="doctor-request-document-id">Record ID</label>
+                    <input
+                      id="doctor-request-document-id"
+                      className="hn-input"
+                      value={requestForm.documentId}
+                      onChange={(e) => setRequestForm((prev) => ({ ...prev, documentId: e.target.value }))}
+                    />
                   </div>
+                  <div className="hn-field" style={{ marginBottom: 0 }}>
+                    <label className="hn-label" htmlFor="doctor-request-reason">Access reason</label>
+                    <input
+                      id="doctor-request-reason"
+                      className="hn-input"
+                      value={requestForm.reason}
+                      onChange={(e) => setRequestForm((prev) => ({ ...prev, reason: e.target.value }))}
+                      placeholder="State why this record is required"
+                    />
+                  </div>
+                  <button type="submit" className="hn-btn hn-btn-primary" disabled={busy}>Submit request</button>
                 </div>
-              ) : (
-                <div className="hn-empty-state">
-                  <strong>No document selected</strong>
-                  <p className="hn-text-muted" style={{ margin: '0.5rem 0 0' }}>
-                    Open one of your released records to review its details.
-                  </p>
-                </div>
-              )}
+              </form>
             </section>
-          </div>
+          )}
+
+          <section className="hn-card" style={{ marginTop: '1.5rem' }}>
+            <h2 style={{ marginTop: 0 }}>My Requests</h2>
+            <p className="hn-text-muted" style={{ marginTop: '0.35rem' }}>
+              Only requests submitted from your own account appear here.
+            </p>
+
+            <div className="hn-table-wrap">
+              <table className="hn-table">
+                <thead>
+                  <tr>
+                    <th>Request</th>
+                    <th>Record</th>
+                    <th>Submitted As</th>
+                    <th>Status</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {requests.map((item) => (
+                    <tr key={item.id}>
+                      <td>#{item.id}</td>
+                      <td>#{item.documentId}</td>
+                      <td>{safeRoleName(item.requestedRole)}</td>
+                      <td><StatusPill status={item.status} /></td>
+                      <td>{item.reason || 'No reason recorded'}</td>
+                    </tr>
+                  ))}
+                  {requests.length === 0 && (
+                    <tr>
+                      <td colSpan="5" className="hn-text-muted">
+                        {busy ? 'Loading requests…' : 'No requests available.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </>
       )}
     </div>

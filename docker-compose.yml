@@ -30,6 +30,8 @@ services:
       - .env
     expose:
       - "8080"
+    volumes:
+      - ./backend/uploads:/tmp/healthnexus/uploads
     depends_on:
       db:
         condition: service_healthy

@@ -16,7 +16,9 @@ router.post(
 router.get('/', requireAuth, documentController.listDocuments);
 router.get('/requests', requireAuth, documentController.listRequests);
 router.get('/:documentId', requireAuth, documentController.getDocument);
+router.get('/:documentId/preview', requireAuth, documentController.previewDocument);
 router.get('/:documentId/download', requireAuth, documentController.downloadDocument);
+router.delete('/:documentId', requireAuth, documentController.deleteDocument);
 router.post('/:documentId/requests', requireAuth, documentController.createRequest);
 router.patch('/requests/:requestId', requireAuth, documentController.reviewRequest);
 
