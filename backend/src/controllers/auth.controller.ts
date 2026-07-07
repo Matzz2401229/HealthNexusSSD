@@ -174,7 +174,8 @@ export async function login(
       req.session.save((err) => (err ? reject(err) : resolve()));
     });
 
-    attachCsrfToken(res);
+    await authService.attachSessionToUser(req.sessionID, sessionUser.id);
+    attachCsrfToken(req, res);
 
     await recordAudit({
       userId: sessionUser.id,
@@ -226,6 +227,15 @@ export async function logout(req: Request, res: Response): Promise<void> {
   });
 
   res.status(200).json({ message: 'Logged out.' });
+}
+
+/** GET /api/auth/csrf — issue a session-bound CSRF token before state-changing calls. */
+export async function csrf(req: Request, res: Response): Promise<void> {
+  const token = attachCsrfToken(req, res);
+  await new Promise<void>((resolve, reject) => {
+    req.session.save((err) => (err ? reject(err) : resolve()));
+  });
+  res.status(200).json({ csrfToken: token });
 }
 
 /** POST /api/auth/forgot-password — generic, non-enumerating reset request. */

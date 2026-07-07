@@ -103,6 +103,7 @@ export async function recordAudit(event: AuditEvent): Promise<void> {
       action: event.action,
       error: err instanceof Error ? err.message : 'Unknown audit error',
     });
+    throw err;
   } finally {
     try {
       await connection.query('DO RELEASE_LOCK(?)', [lockName]);

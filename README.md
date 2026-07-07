@@ -2,11 +2,6 @@
 
 Secure, role-based telemedicine + EHR **Progressive Web App**. Handles PHI, so
 security is a core requirement. Four roles: **patient, doctor, pharmacist, admin**.
-Group 5 "Gunners".
-
-> This is the D2 implementation skeleton. Feature logic is stubbed with `TODO`s
-> mapped to the workstreams in the D1 design brief §8. Security controls live
-> server-side and are deny-by-default.
 
 ## Stack
 - **Frontend:** React PWA (React Router, Bootstrap, Workbox via vite-plugin-pwa)

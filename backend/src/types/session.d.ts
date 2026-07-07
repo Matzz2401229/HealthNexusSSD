@@ -13,5 +13,6 @@ export interface SessionUser {
 declare module 'express-session' {
   interface SessionData {
     user?: SessionUser;
+    csrfTokenHash?: string;
   }
 }

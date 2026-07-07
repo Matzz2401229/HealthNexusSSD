@@ -21,6 +21,7 @@ jest.mock('../src/services/email.service', () => ({
 
 import { pool } from '../src/db/pool';
 import * as password from '../src/utils/password';
+import { canExposeDevelopmentCode, sendEmail } from '../src/services/email.service';
 import {
   registerPatient,
   registerDoctor,
@@ -30,6 +31,7 @@ import {
   requestPasswordResetCode,
   verifyPasswordResetCode,
   resetPasswordWithToken,
+  attachSessionToUser,
 } from '../src/services/auth.service';
 
 const mockGetConnection = pool.getConnection as unknown as jest.Mock;
@@ -38,6 +40,8 @@ const mockHash = password.hashPassword as unknown as jest.Mock;
 const mockVerify = password.verifyPassword as unknown as jest.Mock;
 const mockDummy = password.dummyPasswordCompare as unknown as jest.Mock;
 const mockValidatePolicy = password.validatePasswordPolicy as unknown as jest.Mock;
+const mockCanExposeDevelopmentCode = canExposeDevelopmentCode as unknown as jest.Mock;
+const mockSendEmail = sendEmail as unknown as jest.Mock;
 
 /** A fake transaction connection for the register functions. */
 function mockConn() {
@@ -55,6 +59,8 @@ beforeEach(() => {
   mockHash.mockResolvedValue('hashed-pw');
   mockDummy.mockResolvedValue(false);
   mockValidatePolicy.mockReturnValue([]);
+  mockSendEmail.mockResolvedValue(true);
+  mockCanExposeDevelopmentCode.mockReturnValue(true);
   mockExecute.mockResolvedValue([[]]); // default for SELECT/UPDATE unless overridden
 });
 
@@ -67,7 +73,10 @@ describe('registration', () => {
     conn.execute.mockResolvedValueOnce([{ insertId: 5 }]).mockResolvedValueOnce([{}]);
     mockGetConnection.mockResolvedValue(conn);
 
-    const res = await registerPatient({ name: 'Pat', dateOfBirth: '1990-01-01', email: 'p@x.com', password: 'pw' });
+    const res = await registerPatient(
+      { name: 'Pat', dateOfBirth: '1990-01-01', email: 'p@x.com', password: 'pw' },
+      { requireEmailVerification: false },
+    );
 
     expect(res.id).toBe(5);
     const usersInsert = conn.execute.mock.calls[0][0] as string;
@@ -84,7 +93,10 @@ describe('registration', () => {
     conn.execute.mockResolvedValueOnce([{ insertId: 6 }]).mockResolvedValueOnce([{}]);
     mockGetConnection.mockResolvedValue(conn);
 
-    await registerDoctor({ name: 'Doc', email: 'd@x.com', password: 'pw', specialty: 'Cardio' });
+    await registerDoctor(
+      { name: 'Doc', email: 'd@x.com', password: 'pw', specialty: 'Cardio' },
+      { requireEmailVerification: false },
+    );
 
     const usersInsert = conn.execute.mock.calls[0][0] as string;
     expect(usersInsert).toMatch(/'doctor'/);
@@ -97,7 +109,10 @@ describe('registration', () => {
     conn.execute.mockResolvedValueOnce([{ insertId: 7 }]).mockResolvedValueOnce([{}]);
     mockGetConnection.mockResolvedValue(conn);
 
-    const res = await registerPharmacist({ name: 'Ph', email: 'ph@x.com', password: 'pw', pharmacy: 'Central' });
+    const res = await registerPharmacist(
+      { name: 'Ph', email: 'ph@x.com', password: 'pw', pharmacy: 'Central' },
+      { requireEmailVerification: false },
+    );
 
     expect(res.id).toBe(7);
     const usersInsert = conn.execute.mock.calls[0][0] as string;
@@ -116,10 +131,23 @@ describe('registration', () => {
     mockGetConnection.mockResolvedValue(conn);
 
     await expect(
-      registerPharmacist({ name: 'Ph', email: 'dupe@x.com', password: 'pw' }),
+      registerPharmacist(
+        { name: 'Ph', email: 'dupe@x.com', password: 'pw' },
+        { requireEmailVerification: false },
+      ),
     ).rejects.toMatchObject({ statusCode: 409 });
     expect(conn.rollback).toHaveBeenCalled();
     expect(conn.release).toHaveBeenCalled();
+  });
+
+  it('requires email verification for self-registration service calls', async () => {
+    await expect(
+      registerPatient({ name: 'Pat', dateOfBirth: '1990-01-01', email: 'p@x.com', password: 'pw' }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: 'Email verification code is required.',
+    });
+    expect(mockGetConnection).not.toHaveBeenCalled();
   });
 });
 
@@ -218,6 +246,30 @@ describe('password reset', () => {
     expect(insertParams[2]).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it('does not expose registration development codes when the local-dev gate is off', async () => {
+    mockCanExposeDevelopmentCode.mockReturnValueOnce(false);
+    mockExecute
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([{}])
+      .mockResolvedValueOnce([{}]);
+
+    const res = await requestRegistrationVerificationCode('new@test.com', '127.0.0.1');
+
+    expect(res.developmentCode).toBeUndefined();
+  });
+
+  it('fails registration code requests when email delivery fails outside local dev', async () => {
+    mockCanExposeDevelopmentCode.mockReturnValue(false);
+    mockSendEmail.mockResolvedValueOnce(false);
+    mockExecute
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([{}])
+      .mockResolvedValueOnce([{}]);
+
+    await expect(requestRegistrationVerificationCode('new@test.com', '127.0.0.1'))
+      .rejects.toMatchObject({ statusCode: 503 });
+  });
+
   it('creates a hashed reset verification code without exposing account existence in the message', async () => {
     mockExecute
       .mockResolvedValueOnce([[{ id: 1 }]])
@@ -294,7 +346,17 @@ describe('password reset', () => {
     expect(conn.execute.mock.calls[0][0]).toMatch(/UPDATE users/i);
     expect(conn.execute.mock.calls[1][0]).toMatch(/UPDATE password_reset_token/i);
     expect(conn.execute.mock.calls[2][0]).toMatch(/DELETE FROM sessions/i);
+    expect(conn.execute.mock.calls[2][1]).toEqual([1]);
     expect(conn.commit).toHaveBeenCalled();
+  });
+
+  it('stores structured session ownership after login', async () => {
+    mockExecute.mockResolvedValueOnce([{}]);
+
+    await attachSessionToUser('session-123', 42);
+
+    expect(mockExecute.mock.calls[0][0]).toMatch(/UPDATE sessions/i);
+    expect(mockExecute.mock.calls[0][1]).toEqual([42, 'session-123']);
   });
 
   it('rejects expired or reused reset tokens', async () => {

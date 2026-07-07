@@ -33,6 +33,19 @@ export interface UploadCheckResult {
   reason?: string;
   detectedMime?: AllowedMime;
   storedName?: string;
+  safeOriginalName?: string;
+}
+
+const unsafeFilenamePattern = new RegExp(
+  `[${String.fromCharCode(0)}-${String.fromCharCode(31)}${String.fromCharCode(127)}"\\\\/:*?<>|]`,
+);
+
+export function sanitizeDownloadFilename(originalName: string): string {
+  return originalName
+    .replace(new RegExp(`${unsafeFilenamePattern.source}+`, 'g'), '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 180) || 'document';
 }
 
 /** Validate size, magic bytes, and filename; return a random UUID storage name. */
@@ -44,6 +57,10 @@ export function validateUpload(originalName: string, buffer: Buffer): UploadChec
   // Reject double / dangerous extensions before trusting anything else.
   const lower = originalName.toLowerCase();
   const dotCount = (lower.match(/\./g) ?? []).length;
+  const baseName = path.basename(originalName);
+  if (baseName !== originalName || unsafeFilenamePattern.test(originalName)) {
+    return { ok: false, reason: 'Unsafe filename.' };
+  }
   if (dotCount > 1) {
     return { ok: false, reason: 'Suspicious filename (multiple extensions).' };
   }
@@ -54,7 +71,7 @@ export function validateUpload(originalName: string, buffer: Buffer): UploadChec
   }
 
   const storedName = `${crypto.randomUUID()}${EXT_FOR[detected]}`;
-  return { ok: true, detectedMime: detected, storedName };
+  return { ok: true, detectedMime: detected, storedName, safeOriginalName: sanitizeDownloadFilename(originalName) };
 }
 
 function detectMime(buffer: Buffer): AllowedMime | null {

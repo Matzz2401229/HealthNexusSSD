@@ -36,6 +36,10 @@ export interface RegisterPatientInput {
   emailVerificationCode?: string;
 }
 
+interface RegistrationOptions {
+  requireEmailVerification?: boolean;
+}
+
 export interface RegisterDoctorInput {
   name: string;
   email: string;
@@ -60,11 +64,6 @@ interface UserAuthRow extends RowDataPacket {
   failed_logins: number;
   locked_until: Date | null;
   full_name: string | null;
-}
-
-interface PasswordResetUserRow extends RowDataPacket {
-  id: number;
-  email: string;
 }
 
 interface PasswordResetTokenRow extends RowDataPacket {
@@ -151,6 +150,13 @@ async function consumeVerificationCode(
   );
 }
 
+async function requireRegistrationVerification(email: string, code: string | undefined): Promise<void> {
+  if (!code) {
+    throw new AppError(400, 'Email verification code is required.');
+  }
+  await consumeVerificationCode(email, 'registration', code);
+}
+
 async function storeVerificationCode(
   email: string,
   purpose: VerificationPurpose,
@@ -199,10 +205,11 @@ async function sendVerificationEmail(
 /** Register a patient (FR1): users row (active) + patient profile row. */
 export async function registerPatient(
   input: RegisterPatientInput,
+  options: RegistrationOptions = {},
 ): Promise<{ id: number }> {
   const email = normaliseEmail(input.email);
-  if (input.emailVerificationCode) {
-    await consumeVerificationCode(email, 'registration', input.emailVerificationCode);
+  if (options.requireEmailVerification !== false) {
+    await requireRegistrationVerification(email, input.emailVerificationCode);
   }
   const passwordHash = await hashPassword(input.password);
 
@@ -239,10 +246,11 @@ export async function registerPatient(
  */
 export async function registerDoctor(
   input: RegisterDoctorInput,
+  options: RegistrationOptions = {},
 ): Promise<{ id: number }> {
   const email = normaliseEmail(input.email);
-  if (input.emailVerificationCode) {
-    await consumeVerificationCode(email, 'registration', input.emailVerificationCode);
+  if (options.requireEmailVerification !== false) {
+    await requireRegistrationVerification(email, input.emailVerificationCode);
   }
   const passwordHash = await hashPassword(input.password);
 
@@ -280,10 +288,11 @@ export async function registerDoctor(
  */
 export async function registerPharmacist(
   input: RegisterPharmacistInput,
+  options: RegistrationOptions = {},
 ): Promise<{ id: number }> {
   const email = normaliseEmail(input.email);
-  if (input.emailVerificationCode) {
-    await consumeVerificationCode(email, 'registration', input.emailVerificationCode);
+  if (options.requireEmailVerification !== false) {
+    await requireRegistrationVerification(email, input.emailVerificationCode);
   }
   const passwordHash = await hashPassword(input.password);
 
@@ -322,10 +331,11 @@ export interface RegisterAdminInput {
 
 export async function registerAdmin(
   input: RegisterAdminInput,
+  options: RegistrationOptions = {},
 ): Promise<{ id: number }> {
   const email = normaliseEmail(input.email);
-  if (input.emailVerificationCode) {
-    await consumeVerificationCode(email, 'registration', input.emailVerificationCode);
+  if (options.requireEmailVerification !== false) {
+    await requireRegistrationVerification(email, input.emailVerificationCode);
   }
   const passwordHash = await hashPassword(input.password);
 
@@ -377,11 +387,12 @@ export async function login(
             COALESCE(p.full_name, d.full_name, ph.full_name, a.full_name) AS full_name
      FROM users u
      LEFT JOIN patient p ON p.id = u.id
-     LEFT JOIN doctor d ON d.id = u.id
-     LEFT JOIN pharmacist ph ON ph.id = u.id
-     LEFT JOIN admin a ON a.id = u.id
-     WHERE u.email = ?
-     LIMIT 1`,
+	     LEFT JOIN doctor d ON d.id = u.id
+	     LEFT JOIN pharmacist ph ON ph.id = u.id
+	     LEFT JOIN admin a ON a.id = u.id
+	     WHERE u.email = ?
+	       AND u.deleted_at IS NULL
+	     LIMIT 1`,
     [email],
   );
 
@@ -448,7 +459,10 @@ export async function requestRegistrationVerificationCode(
 
   const code = generateVerificationCode();
   await storeVerificationCode(email, 'registration', code, ip);
-  await sendVerificationEmail(email, 'registration', code);
+  const delivered = await sendVerificationEmail(email, 'registration', code);
+  if (!delivered && !canExposeDevelopmentCode()) {
+    throw new AppError(503, 'Unable to send verification code. Please try again later.');
+  }
 
   return {
     message: REGISTRATION_CODE_MESSAGE,
@@ -469,7 +483,10 @@ export async function requestPasswordResetCode(
   if (userId) {
     code = generateVerificationCode();
     await storeVerificationCode(email, 'password_reset', code, ip);
-    await sendVerificationEmail(email, 'password_reset', code);
+    const delivered = await sendVerificationEmail(email, 'password_reset', code);
+    if (!delivered && !canExposeDevelopmentCode()) {
+      throw new AppError(503, 'Unable to send verification code. Please try again later.');
+    }
   } else {
     // Follow similar work for non-existent accounts to reduce enumeration clues.
     hashVerificationCode(email, 'password_reset', generateVerificationCode());
@@ -566,8 +583,8 @@ export async function resetPasswordWithToken(
     // Invalidate existing server-side sessions for this account after credential change.
     await conn.execute(
       `DELETE FROM sessions
-       WHERE data LIKE ?`,
-      [`%"id":${resetToken.user_id}%`],
+       WHERE user_id = ?`,
+      [resetToken.user_id],
     );
 
     await conn.commit();
@@ -578,6 +595,15 @@ export async function resetPasswordWithToken(
   } finally {
     conn.release();
   }
+}
+
+export async function attachSessionToUser(sessionId: string, userId: number): Promise<void> {
+  await pool.execute(
+    `UPDATE sessions
+        SET user_id = ?
+      WHERE session_id = ?`,
+    [userId, sessionId],
+  );
 }
 
 /** Increment failed-login counter; lock at the threshold (D1 9.1). */

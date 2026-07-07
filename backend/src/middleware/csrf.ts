@@ -22,13 +22,21 @@ export function issueCsrfToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
+function hashCsrfToken(token: string): string {
+  return crypto
+    .createHmac('sha256', config.session.secret)
+    .update(token)
+    .digest('hex');
+}
+
 /**
  * Issues a fresh CSRF token and sets it as a readable cookie (not httpOnly —
  * the frontend must read it to echo it back in the x-csrf-token header).
  * Call this at the same point a session is created (login).
  */
-export function attachCsrfToken(res: Response): string {
+export function attachCsrfToken(req: Request, res: Response): string {
   const token = issueCsrfToken();
+  req.session.csrfTokenHash = hashCsrfToken(token);
   res.cookie(CSRF_COOKIE, token, {
     httpOnly: false,
     secure: config.isProd(),
@@ -50,8 +58,15 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
 
   const cookieToken = req.cookies?.[CSRF_COOKIE];
   const headerToken = req.get(CSRF_HEADER);
+  const sessionTokenHash = req.session.csrfTokenHash;
 
-  if (!cookieToken || !headerToken || !timingSafeEqual(cookieToken, headerToken)) {
+  if (
+    !cookieToken ||
+    !headerToken ||
+    !sessionTokenHash ||
+    !timingSafeEqual(cookieToken, headerToken) ||
+    !timingSafeEqual(hashCsrfToken(headerToken), sessionTokenHash)
+  ) {
     res.status(403).json({ error: 'Invalid or missing CSRF token.' });
     return;
   }

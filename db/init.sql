@@ -18,8 +18,9 @@ CREATE TABLE IF NOT EXISTS users (
   approval_status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
   email_verified BOOLEAN NOT NULL DEFAULT FALSE,
   failed_logins  INT NOT NULL DEFAULT 0,
-  locked_until   DATETIME NULL,
-  created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	  locked_until   DATETIME NULL,
+	  deleted_at     DATETIME NULL,
+	  created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
@@ -179,6 +180,7 @@ CREATE TABLE IF NOT EXISTS announcement (
   author_id  BIGINT UNSIGNED NOT NULL,
   title      VARCHAR(255) NOT NULL,
   body       TEXT NOT NULL,                            -- output-encode on render (FSR11)
+  deleted_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (author_id) REFERENCES users(id)
 );
@@ -197,6 +199,24 @@ CREATE TABLE IF NOT EXISTS auditlog (
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   -- NB: never store passwords, tokens, or clinical content here.
 );
+
+DELIMITER $$
+CREATE TRIGGER trg_auditlog_no_update
+BEFORE UPDATE ON auditlog
+FOR EACH ROW
+BEGIN
+  SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'Audit log records are immutable';
+END$$
+
+CREATE TRIGGER trg_auditlog_no_delete
+BEFORE DELETE ON auditlog
+FOR EACH ROW
+BEGIN
+  SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'Audit log records are immutable';
+END$$
+DELIMITER ;
 
 CREATE TABLE IF NOT EXISTS password_reset_token (
   id          BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
@@ -229,17 +249,11 @@ CREATE TABLE IF NOT EXISTS email_verification_code (
 CREATE TABLE IF NOT EXISTS sessions (
   session_id VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
   expires    INT UNSIGNED NOT NULL,
+  user_id    BIGINT UNSIGNED NULL,
   data       MEDIUMTEXT COLLATE utf8mb4_bin,
+  INDEX idx_sessions_user (user_id),
   PRIMARY KEY (session_id)
 ) ENGINE=InnoDB;
 
--- =====================================================================
--- Restricted application DB user (D1 §9.6): SELECT/INSERT/UPDATE only.
--- No DROP/CREATE/admin. Password comes from the environment.
--- DELETE is granted ONLY on `sessions` (needed for logout + expiry),
--- never on clinical tables.
--- =====================================================================
-CREATE USER IF NOT EXISTS 'healthnexus_app'@'%' IDENTIFIED BY 'change_me_app_password';
-GRANT SELECT, INSERT, UPDATE ON healthnexus.* TO 'healthnexus_app'@'%';
-GRANT DELETE ON healthnexus.sessions TO 'healthnexus_app'@'%';
-FLUSH PRIVILEGES;
+-- Least-privilege app grants are applied by db/99-privileges.sh so the app
+-- database username remains fully environment-driven from MYSQL_USER.

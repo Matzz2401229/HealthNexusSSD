@@ -28,6 +28,10 @@ services:
     build: ./backend
     env_file:
       - .env
+    environment:
+      NODE_ENV: production
+      ENABLE_DEV_AUTH: "false"
+      ALLOW_DEV_CODES: "false"
     expose:
       - "8080"
     volumes:
@@ -48,10 +52,9 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     # No `ports:` block — DB is only reachable on the internal compose network.
-    ports:
-    - "3307:3306" # !! to be deleted once whole project is done
     volumes:
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./db/99-privileges.sh:/docker-entrypoint-initdb.d/99-privileges.sh:ro
       - db_data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]

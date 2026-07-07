@@ -53,6 +53,7 @@ router.post('/register/doctor', registerLimiter, asyncHandler(authController.reg
 router.post('/register/pharmacist', registerLimiter, asyncHandler(authController.registerPharmacist));
 
 // Login / logout / session (FR3, SR2, D1 9.1)
+router.get('/csrf', asyncHandler(authController.csrf));
 router.post('/login', loginLimiter, asyncHandler(authController.login));
 router.post('/forgot-password', passwordResetLimiter, asyncHandler(authController.forgotPassword));
 router.post('/verify-reset-code', passwordResetLimiter, asyncHandler(authController.verifyResetCode));

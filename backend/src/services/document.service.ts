@@ -178,9 +178,9 @@ async function assertCanAccessDocument(
   }
 
   if (actorRole === 'patient' && actorId === document.patient_id) return;
-  if ((actorRole === 'doctor' || actorRole === 'pharmacist') && actorId === document.uploaded_by) return;
+  if (actorRole === 'doctor' && actorId === document.uploaded_by) return;
 
-  if (actorRole === 'doctor' || actorRole === 'pharmacist' || actorRole === 'admin') {
+  if (actorRole === 'doctor' || actorRole === 'admin') {
     if (await hasApprovedRequest(document.id, actorId)) return;
   }
 
@@ -292,7 +292,7 @@ export async function uploadDocument(input: UploadDocumentInput) {
         patientId: input.patientId,
         uploadedBy: input.uploadedBy,
         storedName: validation.storedName,
-        originalName: input.originalName,
+        originalName: validation.safeOriginalName as string,
         mimeType: validation.detectedMime,
         sizeBytes: input.buffer.length,
         sha256,
