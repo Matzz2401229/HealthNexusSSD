@@ -13,6 +13,8 @@ import {
   DocumentRecord,
   DocumentRequestRecord,
   DocumentRequestStatus,
+  RequestableDocumentRecord,
+  RequestablePatientRecord,
   ReviewDocumentRequestInput,
   UploadDocumentInput,
 } from '../types/document.types';
@@ -63,6 +65,32 @@ function toRequestView(record: DocumentRequestRecord) {
     reviewedAt: record.reviewed_at,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
+    requesterName: record.requester_name ?? null,
+    requesterEmail: record.requester_email ?? null,
+    documentTitle: record.document_title ?? null,
+    documentCategory: record.document_category ?? null,
+    patientId: record.patient_id ?? null,
+    patientName: record.patient_name ?? null,
+    patientEmail: record.patient_email ?? null,
+  };
+}
+
+function toRequestablePatientView(record: RequestablePatientRecord) {
+  return {
+    id: record.id,
+    fullName: record.full_name,
+    email: record.email,
+  };
+}
+
+function toRequestableDocumentView(record: RequestableDocumentRecord) {
+  return {
+    id: record.id,
+    patientId: record.patient_id,
+    originalName: record.original_name,
+    category: record.category,
+    description: record.description,
+    createdAt: record.created_at,
   };
 }
 
@@ -150,10 +178,9 @@ async function assertCanAccessDocument(
   }
 
   if (actorRole === 'patient' && actorId === document.patient_id) return;
-  if (actorRole === 'admin') return;
-  if ((actorRole === 'doctor' || actorRole === 'pharmacist') && actorId === document.uploaded_by) return;
+  if (actorRole === 'doctor' && actorId === document.uploaded_by) return;
 
-  if (actorRole === 'doctor' || actorRole === 'pharmacist') {
+  if (actorRole === 'doctor' || actorRole === 'admin') {
     if (await hasApprovedRequest(document.id, actorId)) return;
   }
 
@@ -169,8 +196,19 @@ async function assertCanCreateRequest(
     throw new DocumentAccessError('Forbidden.', 403);
   }
 
+  if (document.status !== 'active') {
+    throw new DocumentAccessError('Not found.', 404);
+  }
+
   if (actorId === document.patient_id) {
     throw new DocumentAccessError('Forbidden.', 403);
+  }
+
+  if (actorRole === 'doctor') {
+    const isAuthorized = await hasActiveDoctorPatientAuth(actorId, document.patient_id);
+    if (!isAuthorized) {
+      throw new DocumentAccessError('Forbidden.', 403);
+    }
   }
 
   const pending = await query<{ id: number }>(
@@ -191,17 +229,27 @@ async function assertCanCreateRequest(
 async function assertCanReviewRequest(
   actorId: number,
   actorRole: Role,
+  requestedStatus: Extract<DocumentRequestStatus, 'approved' | 'denied' | 'revoked'>,
   requestRecord: DocumentRequestRecord,
   document: DocumentRecord,
 ): Promise<void> {
-  if (requestRecord.status !== 'pending') {
-    throw new DocumentAccessError('Only pending requests can be reviewed.', 409);
+  const isPatientOwner = actorRole === 'patient' && actorId === document.patient_id;
+
+  if (requestedStatus === 'revoked') {
+    if (requestRecord.status !== 'approved') {
+      throw new DocumentAccessError('Only approved requests can be revoked.', 409);
+    }
+    if (isPatientOwner) return;
+    throw new DocumentAccessError('Not found.', 404);
   }
 
-  if (actorRole === 'patient' && actorId === document.patient_id) return;
-  if (actorRole === 'admin') return;
+  if (requestRecord.status === 'pending') {
+    if (isPatientOwner) return;
+    if (actorRole === 'admin' && requestRecord.requester_id !== actorId) return;
+    throw new DocumentAccessError('Not found.', 404);
+  }
 
-  throw new DocumentAccessError('Not found.', 404);
+  throw new DocumentAccessError('Only pending requests can be reviewed.', 409);
 }
 
 export async function uploadDocument(input: UploadDocumentInput) {
@@ -244,7 +292,7 @@ export async function uploadDocument(input: UploadDocumentInput) {
         patientId: input.patientId,
         uploadedBy: input.uploadedBy,
         storedName: validation.storedName,
-        originalName: input.originalName,
+        originalName: validation.safeOriginalName as string,
         mimeType: validation.detectedMime,
         sizeBytes: input.buffer.length,
         sha256,
@@ -329,6 +377,66 @@ export async function listDocuments(actorId: number, actorRole: Role, patientId?
   }
 
   return rows.map(toDocumentView);
+}
+
+export async function listRequestablePatients(actorId: number, actorRole: Role, search = '') {
+  if (actorRole !== 'doctor' && actorRole !== 'admin') {
+    throw new DocumentAccessError('Forbidden.', 403);
+  }
+
+  const like = `%${search.trim()}%`;
+  const searchClause = search.trim()
+    ? `AND (
+         CAST(p.id AS CHAR) LIKE :like
+         OR p.full_name LIKE :like
+         OR u.email LIKE :like
+       )`
+    : '';
+
+  const scopeClause = actorRole === 'doctor'
+    ? `JOIN doctor_patient_auth dpa
+          ON dpa.patient_id = p.id
+         AND dpa.doctor_id = :actorId
+         AND dpa.revoked_at IS NULL`
+    : '';
+
+  const rows = await query<RequestablePatientRecord>(
+    `SELECT p.id, p.full_name, u.email
+       FROM patient p
+       JOIN users u ON u.id = p.id
+       ${scopeClause}
+      WHERE u.is_active = TRUE
+        ${searchClause}
+      ORDER BY p.full_name ASC
+      LIMIT 20`,
+    search.trim() ? { actorId, like } : { actorId },
+  );
+
+  return rows.map(toRequestablePatientView);
+}
+
+export async function listRequestableDocuments(actorId: number, actorRole: Role, patientId: number) {
+  if (actorRole !== 'doctor' && actorRole !== 'admin') {
+    throw new DocumentAccessError('Forbidden.', 403);
+  }
+
+  if (actorRole === 'doctor') {
+    const isAuthorized = await hasActiveDoctorPatientAuth(actorId, patientId);
+    if (!isAuthorized) {
+      throw new DocumentAccessError('Forbidden.', 403);
+    }
+  }
+
+  const rows = await query<RequestableDocumentRecord>(
+    `SELECT id, patient_id, original_name, category, description, created_at
+       FROM medical_document
+      WHERE patient_id = :patientId
+        AND status = 'active'
+      ORDER BY created_at DESC, id DESC`,
+    { patientId },
+  );
+
+  return rows.map(toRequestableDocumentView);
 }
 
 export async function getDocument(actorId: number, actorRole: Role, documentId: number) {
@@ -443,9 +551,23 @@ export async function listDocumentRequests(
   if (actorRole === 'patient') {
     const rows = await query<DocumentRequestRecord>(
       `SELECT dr.id, dr.document_id, dr.requester_id, dr.requested_role, dr.reason, dr.status,
-              dr.reviewed_by, dr.reviewed_at, dr.created_at, dr.updated_at
+              dr.reviewed_by, dr.reviewed_at, dr.created_at, dr.updated_at,
+              COALESCE(req_doctor.full_name, req_pharmacist.full_name, req_admin.full_name, req_patient.full_name, req_user.email) AS requester_name,
+              req_user.email AS requester_email,
+              md.original_name AS document_title,
+              md.category AS document_category,
+              md.patient_id AS patient_id,
+              owner.full_name AS patient_name,
+              owner_user.email AS patient_email
          FROM document_request dr
          JOIN medical_document md ON md.id = dr.document_id
+         JOIN patient owner ON owner.id = md.patient_id
+         JOIN users owner_user ON owner_user.id = owner.id
+         JOIN users req_user ON req_user.id = dr.requester_id
+         LEFT JOIN doctor req_doctor ON req_doctor.id = dr.requester_id
+         LEFT JOIN pharmacist req_pharmacist ON req_pharmacist.id = dr.requester_id
+         LEFT JOIN admin req_admin ON req_admin.id = dr.requester_id
+         LEFT JOIN patient req_patient ON req_patient.id = dr.requester_id
         WHERE md.patient_id = :actorId
           ${status ? "AND dr.status = :status" : ''}
         ORDER BY dr.created_at DESC`,
@@ -456,12 +578,27 @@ export async function listDocumentRequests(
   }
 
   const rows = await query<DocumentRequestRecord>(
-    `SELECT id, document_id, requester_id, requested_role, reason, status, reviewed_by,
-            reviewed_at, created_at, updated_at
-       FROM document_request
-      WHERE requester_id = :actorId
-        ${status ? "AND status = :status" : ''}
-      ORDER BY created_at DESC`,
+    `SELECT dr.id, dr.document_id, dr.requester_id, dr.requested_role, dr.reason, dr.status,
+            dr.reviewed_by, dr.reviewed_at, dr.created_at, dr.updated_at,
+            COALESCE(req_doctor.full_name, req_pharmacist.full_name, req_admin.full_name, req_patient.full_name, req_user.email) AS requester_name,
+            req_user.email AS requester_email,
+            md.original_name AS document_title,
+            md.category AS document_category,
+            md.patient_id AS patient_id,
+            owner.full_name AS patient_name,
+            owner_user.email AS patient_email
+       FROM document_request dr
+       JOIN medical_document md ON md.id = dr.document_id
+       JOIN patient owner ON owner.id = md.patient_id
+       JOIN users owner_user ON owner_user.id = owner.id
+       JOIN users req_user ON req_user.id = dr.requester_id
+       LEFT JOIN doctor req_doctor ON req_doctor.id = dr.requester_id
+       LEFT JOIN pharmacist req_pharmacist ON req_pharmacist.id = dr.requester_id
+       LEFT JOIN admin req_admin ON req_admin.id = dr.requester_id
+       LEFT JOIN patient req_patient ON req_patient.id = dr.requester_id
+      WHERE dr.requester_id = :actorId
+        ${status ? "AND dr.status = :status" : ''}
+      ORDER BY dr.created_at DESC`,
     status ? { actorId, status } : { actorId },
   );
 
@@ -479,7 +616,7 @@ export async function reviewDocumentRequest(input: ReviewDocumentRequestInput) {
     throw new DocumentAccessError('Not found.', 404);
   }
 
-  await assertCanReviewRequest(input.reviewerId, input.reviewerRole, requestRecord, document);
+  await assertCanReviewRequest(input.reviewerId, input.reviewerRole, input.status, requestRecord, document);
 
   await query(
     `UPDATE document_request

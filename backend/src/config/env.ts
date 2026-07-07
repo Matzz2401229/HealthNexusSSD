@@ -20,9 +20,16 @@ function num(name: string, fallback: number): number {
   return raw ? Number(raw) : fallback;
 }
 
+function bool(name: string, fallback = false): boolean {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  return raw === 'true';
+}
+
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: num('BACKEND_PORT', 8080),
+  enableDevAuth: bool('ENABLE_DEV_AUTH'),
 
   db: {
     host: process.env.MYSQL_HOST ?? 'db',
@@ -48,6 +55,24 @@ export const config = {
   upload: {
     maxBytes: num('UPLOAD_MAX_BYTES', 10 * 1024 * 1024),
     dir: process.env.UPLOAD_DIR ?? '/tmp/healthnexus/uploads',
+  },
+
+  email: {
+    from: process.env.SMTP_FROM ?? '',
+    host: process.env.SMTP_HOST ?? '',
+    port: num('SMTP_PORT', 587),
+    user: process.env.SMTP_USER ?? '',
+    password: process.env.SMTP_PASSWORD ?? '',
+    secure: process.env.SMTP_SECURE === 'true',
+    appBaseUrl: process.env.APP_BASE_URL ?? 'http://localhost',
+    timeoutMs: num('SMTP_TIMEOUT_MS', 10_000),
+    maxRetries: num('SMTP_MAX_RETRIES', 2),
+  },
+
+  allowDevCodes: bool('ALLOW_DEV_CODES'),
+
+  isDev(): boolean {
+    return this.nodeEnv === 'development';
   },
 
   isProd(): boolean {

@@ -30,13 +30,34 @@ const registerLimiter = rateLimit({
   message: { error: 'Too many attempts. Please try again later.' },
 });
 
+const passwordResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many reset attempts. Please try again later.' },
+});
+
+const verificationCodeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many code requests. Please try again later.' },
+});
+
 // Registration (FR1, FR2, D1 §9.8)
+router.post('/registration-code', verificationCodeLimiter, asyncHandler(authController.requestRegistrationCode));
 router.post('/register', registerLimiter, asyncHandler(authController.registerPatient));
 router.post('/register/doctor', registerLimiter, asyncHandler(authController.registerDoctor));
 router.post('/register/pharmacist', registerLimiter, asyncHandler(authController.registerPharmacist));
 
 // Login / logout / session (FR3, SR2, D1 9.1)
+router.get('/csrf', asyncHandler(authController.csrf));
 router.post('/login', loginLimiter, asyncHandler(authController.login));
+router.post('/forgot-password', passwordResetLimiter, asyncHandler(authController.forgotPassword));
+router.post('/verify-reset-code', passwordResetLimiter, asyncHandler(authController.verifyResetCode));
+router.post('/reset-password', passwordResetLimiter, asyncHandler(authController.resetPassword));
 router.post('/logout', asyncHandler(authController.logout));
 router.get('/me', requireAuth, asyncHandler(authController.me));
 

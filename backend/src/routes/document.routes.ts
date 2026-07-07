@@ -15,6 +15,8 @@ router.post(
 
 router.get('/', requireAuth, documentController.listDocuments);
 router.get('/requests', requireAuth, documentController.listRequests);
+router.get('/requestable-patients', requireAuth, documentController.listRequestablePatients);
+router.get('/requestable-patients/:patientId/records', requireAuth, documentController.listRequestableDocuments);
 router.get('/:documentId', requireAuth, documentController.getDocument);
 router.get('/:documentId/preview', requireAuth, documentController.previewDocument);
 router.get('/:documentId/download', requireAuth, documentController.downloadDocument);

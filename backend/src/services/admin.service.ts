@@ -1,4 +1,4 @@
-import { RowDataPacket } from 'mysql2';
+import { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../db/pool';
 import { logger } from '../utils/logger';
 import {
@@ -7,6 +7,7 @@ import {
   registerPharmacist,
   registerAdmin,
 } from './auth.service';
+import { hardDeleteUserById } from './userDeletion.service';
 
 export interface DoctorRegistrationRow extends RowDataPacket {
   id: number;
@@ -33,6 +34,8 @@ export interface AuditLogRow extends RowDataPacket {
   target: string | null;
   ip_address: string | null;
   result: string;
+  prev_hash: string | null;
+  entry_hash: string;
   created_at: string;
 }
 
@@ -49,6 +52,18 @@ export interface ActivitySummary {
   flaggedEvents: number;
 }
 
+export interface AdminOverview {
+  activeSessions: number;
+  recentLogins: number;
+  flaggedEvents: number;
+  pendingDoctors: number;
+  totalUsers: number;
+  activeUsers: number;
+  pendingDocumentRequests: number;
+  latestAuditEvents: AuditLogRow[];
+  recentRegistrations: UserRow[];
+}
+
 export interface CreateUserInput {
   name: string;
   email: string;
@@ -61,12 +76,12 @@ export interface CreateUserInput {
 
 export async function listPendingDoctors(): Promise<DoctorRegistrationRow[]> {
   try {
-    const [rows] = await pool.execute<DoctorRegistrationRow[]>(
-      `SELECT u.id, u.email, d.full_name, d.specialty, u.created_at, u.is_active, u.approval_status
-       FROM users u
-       JOIN doctor d ON d.id = u.id
-       WHERE u.role = 'doctor' AND u.approval_status = 'pending'
-       ORDER BY u.created_at DESC`,
+      const [rows] = await pool.execute<DoctorRegistrationRow[]>(
+        `SELECT u.id, u.email, d.full_name, d.specialty, u.created_at, u.is_active, u.approval_status
+         FROM users u
+         JOIN doctor d ON d.id = u.id
+         WHERE u.role = 'doctor' AND u.approval_status = 'pending' AND u.deleted_at IS NULL
+         ORDER BY u.created_at DESC`,
     );
     return rows;
   } catch (err) {
@@ -80,7 +95,7 @@ export async function approveDoctor(
   adminId: number
 ): Promise<boolean> {
   try {
-    await pool.execute("UPDATE users SET approval_status = 'approved', is_active = TRUE WHERE id = ?", [id]);
+      await pool.execute("UPDATE users SET approval_status = 'approved', is_active = TRUE WHERE id = ? AND deleted_at IS NULL", [id]);
     await pool.execute('UPDATE doctor SET approved_by = ? WHERE id = ?', [adminId, id]);
     return true;
   } catch (err) {
@@ -91,7 +106,7 @@ export async function approveDoctor(
 
 export async function rejectDoctor(id: number): Promise<boolean> {
   try {
-    await pool.execute("UPDATE users SET approval_status = 'rejected', is_active = FALSE WHERE id = ?", [id]);
+      await pool.execute("UPDATE users SET approval_status = 'rejected', is_active = FALSE WHERE id = ? AND deleted_at IS NULL", [id]);
     return true;
   } catch (err) {
     logger.error('Failed to reject doctor registration', { err, id });
@@ -108,7 +123,7 @@ export async function createUser(input: CreateUserInput): Promise<boolean> {
           email: input.email,
           password: input.password,
           dateOfBirth: input.dateOfBirth!,
-        });
+        }, { requireEmailVerification: false });
         break;
 
       case 'doctor':
@@ -117,7 +132,7 @@ export async function createUser(input: CreateUserInput): Promise<boolean> {
           email: input.email,
           password: input.password,
           specialty: input.specialty,
-        });
+        }, { requireEmailVerification: false });
         break;
 
       case 'pharmacist':
@@ -126,7 +141,7 @@ export async function createUser(input: CreateUserInput): Promise<boolean> {
           email: input.email,
           password: input.password,
           pharmacy: input.pharmacy,
-        });
+        }, { requireEmailVerification: false });
         break;
 
       case 'admin':
@@ -134,7 +149,7 @@ export async function createUser(input: CreateUserInput): Promise<boolean> {
           name: input.name,
           email: input.email,
           password: input.password,
-        });
+        }, { requireEmailVerification: false });
         break;
     }
 
@@ -148,10 +163,11 @@ export async function createUser(input: CreateUserInput): Promise<boolean> {
 
 export async function listUsers(): Promise<UserRow[]> {
   try {
-    const [rows] = await pool.execute<UserRow[]>(
-      `SELECT id, email, role, is_active, created_at
-       FROM users
-       ORDER BY created_at DESC LIMIT 200`,
+      const [rows] = await pool.execute<UserRow[]>(
+        `SELECT id, email, role, is_active, created_at
+         FROM users
+         WHERE deleted_at IS NULL
+         ORDER BY created_at DESC LIMIT 200`,
     );
     return rows;
   } catch (err) {
@@ -162,7 +178,7 @@ export async function listUsers(): Promise<UserRow[]> {
 
 export async function updateUserStatus(id: number, isActive: boolean): Promise<boolean> {
   try {
-    await pool.execute('UPDATE users SET is_active = ? WHERE id = ?', [isActive, id]);
+      await pool.execute('UPDATE users SET is_active = ? WHERE id = ? AND deleted_at IS NULL', [isActive, id]);
     return true;
   } catch (err) {
     logger.error('Failed to update user status', { err, id, isActive });
@@ -172,8 +188,7 @@ export async function updateUserStatus(id: number, isActive: boolean): Promise<b
 
 export async function deleteUser(id: number): Promise<boolean> {
   try {
-    await pool.execute('DELETE FROM users WHERE id = ?', [id]);
-    return true;
+    return await hardDeleteUserById(id);
   } catch (err) {
     logger.error('Failed to delete user', { err, id });
     return false;
@@ -183,7 +198,7 @@ export async function deleteUser(id: number): Promise<boolean> {
 export async function listAuditLogs(): Promise<AuditLogRow[]> {
   try {
     const [rows] = await pool.execute<AuditLogRow[]>(
-      `SELECT id, user_id, role, action, target, ip_address, result, created_at
+      `SELECT id, user_id, role, action, target, ip_address, result, prev_hash, entry_hash, created_at
        FROM auditlog
        ORDER BY id DESC LIMIT 100`,
     );
@@ -216,11 +231,80 @@ export async function getActivitySummary(): Promise<ActivitySummary> {
   }
 }
 
+export async function getAdminOverview(): Promise<AdminOverview> {
+  try {
+    const [
+      [activeRows],
+      [recentRows],
+      [flaggedRows],
+      [pendingDoctorRows],
+      [totalUserRows],
+      [activeUserRows],
+      [pendingRequestRows],
+      [latestAuditEvents],
+      [recentRegistrations],
+    ] = await Promise.all([
+      pool.execute<RowDataPacket[]>('SELECT COUNT(*) AS count FROM sessions'),
+      pool.execute<RowDataPacket[]>(
+        'SELECT COUNT(*) AS count FROM auditlog WHERE action = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)',
+        ['login'],
+      ),
+      pool.execute<RowDataPacket[]>(
+        'SELECT COUNT(*) AS count FROM auditlog WHERE result = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)',
+        ['failure'],
+      ),
+        pool.execute<RowDataPacket[]>(
+          "SELECT COUNT(*) AS count FROM users WHERE role = 'doctor' AND approval_status = 'pending' AND deleted_at IS NULL",
+        ),
+        pool.execute<RowDataPacket[]>('SELECT COUNT(*) AS count FROM users WHERE deleted_at IS NULL'),
+        pool.execute<RowDataPacket[]>('SELECT COUNT(*) AS count FROM users WHERE is_active = TRUE AND deleted_at IS NULL'),
+      pool.execute<RowDataPacket[]>("SELECT COUNT(*) AS count FROM document_request WHERE status = 'pending'"),
+      pool.execute<AuditLogRow[]>(
+        `SELECT id, user_id, role, action, target, ip_address, result, prev_hash, entry_hash, created_at
+         FROM auditlog
+         ORDER BY id DESC LIMIT 5`,
+      ),
+        pool.execute<UserRow[]>(
+          `SELECT id, email, role, is_active, created_at
+           FROM users
+           WHERE deleted_at IS NULL
+           ORDER BY created_at DESC LIMIT 5`,
+      ),
+    ]);
+
+    return {
+      activeSessions: Number(activeRows[0]?.count ?? 0),
+      recentLogins: Number(recentRows[0]?.count ?? 0),
+      flaggedEvents: Number(flaggedRows[0]?.count ?? 0),
+      pendingDoctors: Number(pendingDoctorRows[0]?.count ?? 0),
+      totalUsers: Number(totalUserRows[0]?.count ?? 0),
+      activeUsers: Number(activeUserRows[0]?.count ?? 0),
+      pendingDocumentRequests: Number(pendingRequestRows[0]?.count ?? 0),
+      latestAuditEvents,
+      recentRegistrations,
+    };
+  } catch (err) {
+    logger.error('Failed to get admin overview', { err });
+    return {
+      activeSessions: 0,
+      recentLogins: 0,
+      flaggedEvents: 0,
+      pendingDoctors: 0,
+      totalUsers: 0,
+      activeUsers: 0,
+      pendingDocumentRequests: 0,
+      latestAuditEvents: [],
+      recentRegistrations: [],
+    };
+  }
+}
+
 export async function listAnnouncements(): Promise<AnnouncementRow[]> {
   try {
     const [rows] = await pool.execute<AnnouncementRow[]>(
       `SELECT id, title, body, created_at
        FROM announcement
+       WHERE deleted_at IS NULL
        ORDER BY id DESC LIMIT 100`,
     );
     return rows;
@@ -245,7 +329,10 @@ export async function createAnnouncement(input: { title: string; body: string },
 
 export async function updateAnnouncement(id: number, input: { title: string; body: string }): Promise<boolean> {
   try {
-    await pool.execute('UPDATE announcement SET title = ?, body = ? WHERE id = ?', [input.title.trim(), input.body.trim(), id]);
+    await pool.execute(
+      'UPDATE announcement SET title = ?, body = ? WHERE id = ? AND deleted_at IS NULL',
+      [input.title.trim(), input.body.trim(), id],
+    );
     return true;
   } catch (err) {
     logger.error('Failed to update announcement', { err, id });
@@ -256,7 +343,7 @@ export async function updateAnnouncement(id: number, input: { title: string; bod
 export async function deleteAnnouncement(id: number): Promise<boolean> {
   try {
     await pool.execute(
-      'DELETE FROM announcement WHERE id = ?',
+      'UPDATE announcement SET deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL',
       [id],
     );
     return true;

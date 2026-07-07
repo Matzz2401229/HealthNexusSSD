@@ -6,12 +6,15 @@ import {
   documentIdParamsSchema,
   listDocumentRequestsQuerySchema,
   listDocumentsQuerySchema,
+  requestablePatientParamsSchema,
+  requestablePatientsQuerySchema,
   reviewDocumentRequestBodySchema,
   reviewDocumentRequestParamsSchema,
   uploadDocumentHeadersSchema,
 } from '../schemas/document.schema';
 import { DocumentAccessError } from '../services/document.service';
 import * as documentService from '../services/document.service';
+import { sanitizeDownloadFilename } from '../middleware/fileUpload';
 
 function assertUser(req: Request) {
   if (!req.session.user) {
@@ -61,6 +64,28 @@ export async function listDocuments(req: Request, res: Response, next: NextFunct
   }
 }
 
+export async function listRequestablePatients(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const user = assertUser(req);
+    const query = requestablePatientsQuerySchema.parse(req.query);
+    const items = await documentService.listRequestablePatients(user.id, user.role, query.search);
+    res.json({ items });
+  } catch (err) {
+    handleDocumentError(err, next);
+  }
+}
+
+export async function listRequestableDocuments(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const user = assertUser(req);
+    const params = requestablePatientParamsSchema.parse(req.params);
+    const items = await documentService.listRequestableDocuments(user.id, user.role, params.patientId);
+    res.json({ items });
+  } catch (err) {
+    handleDocumentError(err, next);
+  }
+}
+
 export async function getDocument(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const user = assertUser(req);
@@ -80,7 +105,7 @@ export async function downloadDocument(req: Request, res: Response, next: NextFu
 
     res.setHeader('Content-Type', file.mimeType);
     res.setHeader('Content-Length', String(file.sizeBytes));
-    res.setHeader('Content-Disposition', `attachment; filename="${file.originalName}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${sanitizeDownloadFilename(file.originalName)}"`);
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
 
@@ -100,7 +125,7 @@ export async function previewDocument(req: Request, res: Response, next: NextFun
 
     res.setHeader('Content-Type', file.mimeType);
     res.setHeader('Content-Length', String(file.sizeBytes));
-    res.setHeader('Content-Disposition', `inline; filename="${file.originalName}"`);
+    res.setHeader('Content-Disposition', `inline; filename="${sanitizeDownloadFilename(file.originalName)}"`);
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
 

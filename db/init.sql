@@ -18,8 +18,9 @@ CREATE TABLE IF NOT EXISTS users (
   approval_status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
   email_verified BOOLEAN NOT NULL DEFAULT FALSE,
   failed_logins  INT NOT NULL DEFAULT 0,
-  locked_until   DATETIME NULL,
-  created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	  locked_until   DATETIME NULL,
+	  deleted_at     DATETIME NULL,
+	  created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
@@ -179,6 +180,7 @@ CREATE TABLE IF NOT EXISTS announcement (
   author_id  BIGINT UNSIGNED NOT NULL,
   title      VARCHAR(255) NOT NULL,
   body       TEXT NOT NULL,                            -- output-encode on render (FSR11)
+  deleted_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (author_id) REFERENCES users(id)
 );
@@ -198,21 +200,60 @@ CREATE TABLE IF NOT EXISTS auditlog (
   -- NB: never store passwords, tokens, or clinical content here.
 );
 
+DELIMITER $$
+CREATE TRIGGER trg_auditlog_no_update
+BEFORE UPDATE ON auditlog
+FOR EACH ROW
+BEGIN
+  SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'Audit log records are immutable';
+END$$
+
+CREATE TRIGGER trg_auditlog_no_delete
+BEFORE DELETE ON auditlog
+FOR EACH ROW
+BEGIN
+  SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'Audit log records are immutable';
+END$$
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS password_reset_token (
+  id          BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  user_id     BIGINT UNSIGNED NOT NULL,
+  token_hash  CHAR(64) NOT NULL UNIQUE,                -- SHA-256 of the random reset token; never store plaintext
+  expires_at  DATETIME NOT NULL,
+  used_at     DATETIME NULL,
+  requested_ip VARCHAR(45) NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_password_reset_user (user_id),
+  INDEX idx_password_reset_expires (expires_at),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS email_verification_code (
+  id          BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  email       VARCHAR(255) NOT NULL,
+  purpose     ENUM('registration','password_reset') NOT NULL,
+  code_hash   CHAR(64) NOT NULL,
+  expires_at  DATETIME NOT NULL,
+  attempts    INT NOT NULL DEFAULT 0,
+  used_at     DATETIME NULL,
+  requested_ip VARCHAR(45) NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_email_verification_lookup (email, purpose, used_at),
+  INDEX idx_email_verification_expires (expires_at)
+);
+
 -- --- Session store (express-mysql-session) --------------------------
 CREATE TABLE IF NOT EXISTS sessions (
   session_id VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
   expires    INT UNSIGNED NOT NULL,
+  user_id    BIGINT UNSIGNED NULL,
   data       MEDIUMTEXT COLLATE utf8mb4_bin,
+  INDEX idx_sessions_user (user_id),
   PRIMARY KEY (session_id)
 ) ENGINE=InnoDB;
 
--- =====================================================================
--- Restricted application DB user (D1 §9.6): SELECT/INSERT/UPDATE only.
--- No DROP/CREATE/admin. Password comes from the environment.
--- DELETE is granted ONLY on `sessions` (needed for logout + expiry),
--- never on clinical tables.
--- =====================================================================
-CREATE USER IF NOT EXISTS 'healthnexus_app'@'%' IDENTIFIED BY 'change_me_app_password';
-GRANT SELECT, INSERT, UPDATE ON healthnexus.* TO 'healthnexus_app'@'%';
-GRANT DELETE ON healthnexus.sessions TO 'healthnexus_app'@'%';
-FLUSH PRIVILEGES;
+-- Least-privilege app grants are applied by db/99-privileges.sh so the app
+-- database username remains fully environment-driven from MYSQL_USER.

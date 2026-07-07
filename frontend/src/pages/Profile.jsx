@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiGet, apiPatch } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
 
 /**
  * Profile page (FR4). Two independent forms — profile details and change
@@ -19,6 +20,7 @@ const ROLE_FIELD = {
 };
 
 export default function Profile() {
+  const { updateUser } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loadError, setLoadError] = useState('');
 
@@ -58,6 +60,9 @@ export default function Profile() {
       }
       const data = await apiPatch('/profile', payload);
       setProfile(data.profile);
+      if (data.profile?.full_name) {
+        updateUser({ fullName: data.profile.full_name });
+      }
       setProfileSuccess(data.message || 'Profile updated.');
     } catch (err) {
       setProfileError(err.message || 'Failed to update profile.');

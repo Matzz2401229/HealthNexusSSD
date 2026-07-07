@@ -28,40 +28,70 @@ function mockRes() {
   return res;
 }
 
+function mockReq(method = 'POST') {
+  return {
+    method,
+    cookies: {},
+    session: {},
+    secure: false,
+    get: () => undefined,
+  } as unknown as Request;
+}
+
 describe('attachCsrfToken', () => {
   it('sets a readable (non-httpOnly) cookie with a fresh token', () => {
+    const req = mockReq();
     const res = mockRes();
-    const token = attachCsrfToken(res);
+    const token = attachCsrfToken(req, res);
 
     expect(token).toMatch(/^[0-9a-f]{64}$/);
+    expect(req.session.csrfTokenHash).toMatch(/^[0-9a-f]{64}$/);
     expect(res.cookies.csrf_token).toBeDefined();
     const { value, options } = res.cookies.csrf_token as { value: string; options: { httpOnly: boolean } };
     expect(value).toBe(token);
     expect(options.httpOnly).toBe(false);
+    expect(options.secure).toBe(false);
+  });
+
+  it('marks the csrf cookie secure only for HTTPS/proxied HTTPS requests', () => {
+    const req = {
+      ...mockReq(),
+      secure: false,
+      get: (name: string) => (name.toLowerCase() === 'x-forwarded-proto' ? 'https' : undefined),
+    } as unknown as Request;
+    const res = mockRes();
+
+    attachCsrfToken(req, res);
+
+    const { options } = res.cookies.csrf_token as { options: { secure: boolean } };
+    expect(options.secure).toBe(true);
   });
 
   it('issues a different token on each call', () => {
+    const req = mockReq();
     const res = mockRes();
-    const first = attachCsrfToken(res);
-    const second = attachCsrfToken(res);
+    const first = attachCsrfToken(req, res);
+    const second = attachCsrfToken(req, res);
     expect(first).not.toBe(second);
   });
 });
 
 describe('clearCsrfToken', () => {
   it('clears the csrf cookie', () => {
+    const req = mockReq();
     const res = mockRes();
-    attachCsrfToken(res);
+    attachCsrfToken(req, res);
     clearCsrfToken(res);
     expect(res.cookies.csrf_token).toBeUndefined();
   });
 });
 
 describe('csrfProtection', () => {
-  function mockReqWith(cookieToken?: string, headerToken?: string) {
+  function mockReqWith(cookieToken?: string, headerToken?: string, sessionTokenHash?: string) {
     return {
       method: 'POST',
       cookies: cookieToken !== undefined ? { csrf_token: cookieToken } : {},
+      session: { csrfTokenHash: sessionTokenHash },
       get: (name: string) => (name.toLowerCase() === 'x-csrf-token' ? headerToken : undefined),
     } as unknown as Request;
   }
@@ -93,7 +123,10 @@ describe('csrfProtection', () => {
   });
 
   it('passes through when the cookie and header tokens match', () => {
-    const req = mockReqWith('same-token', 'same-token');
+    const issuingReq = mockReq();
+    const issuingRes = mockRes();
+    const token = attachCsrfToken(issuingReq, issuingRes);
+    const req = mockReqWith(token, token, issuingReq.session.csrfTokenHash);
     const res = mockRes();
     const next = jest.fn();
     csrfProtection(req, res, next);

@@ -1,7 +1,50 @@
 import { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import * as adminService from '../services/admin.service';
 import { recordAudit } from '../services/audit.service';
 import { validatePasswordPolicy } from '../utils/password';
+import { AppError } from '../utils/AppError';
+
+const idParamsSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
+const toggleUserStatusSchema = z.object({
+  isActive: z.boolean(),
+});
+
+const createUserSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  email: z.string().trim().toLowerCase().email().max(254),
+  password: z.string().min(1).max(128),
+  role: z.enum(['patient', 'doctor', 'pharmacist', 'admin']),
+  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  specialty: z.string().trim().min(1).max(255).optional(),
+  pharmacy: z.string().trim().min(1).max(255).optional(),
+}).superRefine((value, ctx) => {
+  if (value.role === 'patient' && !value.dateOfBirth) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Date of birth is required.', path: ['dateOfBirth'] });
+  }
+  if (value.role === 'doctor' && !value.specialty) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Specialty is required.', path: ['specialty'] });
+  }
+  if (value.role === 'pharmacist' && !value.pharmacy) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Pharmacy is required.', path: ['pharmacy'] });
+  }
+});
+
+const announcementSchema = z.object({
+  title: z.string().trim().min(1).max(255),
+  body: z.string().trim().min(1).max(5000),
+});
+
+function parseOrThrow<T>(schema: z.ZodType<T>, value: unknown): T {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) {
+    throw new AppError(400, parsed.error.issues[0]?.message ?? 'Invalid request.');
+  }
+  return parsed.data;
+}
 
 export async function listPendingDoctors(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -22,7 +65,7 @@ export async function listPendingDoctors(req: Request, res: Response, next: Next
 
 export async function approveDoctor(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const id = Number(req.params.id);
+    const { id } = parseOrThrow(idParamsSchema, req.params);
     const adminId = req.session.user?.id;
 
     if (!adminId) {
@@ -52,7 +95,7 @@ export async function approveDoctor(req: Request, res: Response, next: NextFunct
 
 export async function rejectDoctor(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const id = Number(req.params.id);
+    const { id } = parseOrThrow(idParamsSchema, req.params);
     const ok = await adminService.rejectDoctor(id);
     if (!ok) {
       res.status(500).json({ error: 'Failed to reject registration.' });
@@ -83,9 +126,9 @@ export async function listUsers(req: Request, res: Response, next: NextFunction)
 
 export async function toggleUserStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const id = Number(req.params.id);
-    const { isActive } = req.body as { isActive?: boolean };
-    const ok = await adminService.updateUserStatus(id, Boolean(isActive));
+    const { id } = parseOrThrow(idParamsSchema, req.params);
+    const { isActive } = parseOrThrow(toggleUserStatusSchema, req.body);
+    const ok = await adminService.updateUserStatus(id, isActive);
     if (!ok) {
       res.status(500).json({ error: 'Failed to update user status.' });
       return;
@@ -112,39 +155,9 @@ export async function createUser(
   next: NextFunction
 ): Promise<void> {
   try {
-    const {
-      name,
-      email,
-      password,
-      role,
-      dateOfBirth,
-      specialty,
-      pharmacy,
-    } = req.body;
+    const input = parseOrThrow(createUserSchema, req.body);
 
-    // Common required fields
-    if (!name || !email || !password || !role) {
-      res.status(400).json({ error: 'All fields are required.' });
-      return;
-    }
-
-    // Role-specific required fields
-    if (role === 'patient' && !dateOfBirth) {
-      res.status(400).json({ error: 'Date of birth is required.' });
-      return;
-    }
-
-    if (role === 'doctor' && !specialty) {
-      res.status(400).json({ error: 'Specialty is required.' });
-      return;
-    }
-
-    if (role === 'pharmacist' && !pharmacy) {
-      res.status(400).json({ error: 'Pharmacy is required.' });
-      return;
-    }
-
-    const passwordErrors = validatePasswordPolicy(password);
+    const passwordErrors = validatePasswordPolicy(input.password);
 
     if (passwordErrors.length > 0) {
       res.status(400).json({
@@ -154,13 +167,13 @@ export async function createUser(
     }
 
     const ok = await adminService.createUser({
-      name,
-      email,
-      password,
-      role,
-      dateOfBirth,
-      specialty,
-      pharmacy,
+      name: input.name,
+      email: input.email,
+      password: input.password,
+      role: input.role,
+      dateOfBirth: input.dateOfBirth,
+      specialty: input.specialty,
+      pharmacy: input.pharmacy,
     });
 
     if (!ok) {
@@ -172,7 +185,7 @@ export async function createUser(
       userId: req.session.user?.id ?? null,
       role: req.session.user?.role ?? null,
       action: 'admin.create_user',
-      target: email,
+      target: input.email,
       ip: req.ip,
       result: 'success',
     });
@@ -188,7 +201,7 @@ export async function createUser(
 
 export async function removeUser(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const id = Number(req.params.id);
+    const { id } = parseOrThrow(idParamsSchema, req.params);
     const ok = await adminService.deleteUser(id);
     if (!ok) {
       res.status(500).json({ error: 'Failed to remove user.' });
@@ -228,6 +241,15 @@ export async function getActivitySummary(req: Request, res: Response, next: Next
   }
 }
 
+export async function getAdminOverview(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const data = await adminService.getAdminOverview();
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function listAnnouncements(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const data = await adminService.listAnnouncements();
@@ -239,12 +261,8 @@ export async function listAnnouncements(req: Request, res: Response, next: NextF
 
 export async function createAnnouncement(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { title, body } = req.body as { title?: string; body?: string };
-    if (!title || !body) {
-      res.status(400).json({ error: 'Title and body are required.' });
-      return;
-    }
-    const ok = await adminService.createAnnouncement({ title, body }, req.session.user?.id ?? 0);
+    const input = parseOrThrow(announcementSchema, req.body);
+    const ok = await adminService.createAnnouncement(input, req.session.user?.id ?? 0);
     if (!ok) {
       res.status(500).json({ error: 'Failed to publish announcement.' });
       return;
@@ -254,7 +272,7 @@ export async function createAnnouncement(req: Request, res: Response, next: Next
       userId: req.session.user?.id ?? null,
       role: req.session.user?.role ?? null,
       action: 'admin.create_announcement',
-      target: `announcement:${title}`,
+      target: `announcement:${input.title}`,
       ip: req.ip,
       result: 'success',
     });
@@ -267,13 +285,9 @@ export async function createAnnouncement(req: Request, res: Response, next: Next
 
 export async function updateAnnouncement(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const id = Number(req.params.id);
-    const { title, body } = req.body as { title?: string; body?: string };
-    if (!title || !body) {
-      res.status(400).json({ error: 'Title and body are required.' });
-      return;
-    }
-    const ok = await adminService.updateAnnouncement(id, { title, body });
+    const { id } = parseOrThrow(idParamsSchema, req.params);
+    const input = parseOrThrow(announcementSchema, req.body);
+    const ok = await adminService.updateAnnouncement(id, input);
     if (!ok) {
       res.status(500).json({ error: 'Failed to update announcement.' });
       return;
@@ -283,7 +297,7 @@ export async function updateAnnouncement(req: Request, res: Response, next: Next
       userId: req.session.user?.id ?? null,
       role: req.session.user?.role ?? null,
       action: 'admin.update_announcement',
-      target: `announcement:id=${id}|title=${title}`,
+      target: `announcement:id=${id}|title=${input.title}`,
       ip: req.ip,
       result: 'success',
     });
@@ -297,7 +311,7 @@ export async function updateAnnouncement(req: Request, res: Response, next: Next
 
 export async function deleteAnnouncement(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const id = Number(req.params.id);
+    const { id } = parseOrThrow(idParamsSchema, req.params);
 
     const ok = await adminService.deleteAnnouncement(id);
 

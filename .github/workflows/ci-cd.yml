@@ -1,7 +1,7 @@
 name: HealthNexus SSD CI/CD
 
 # Runs on every feature branch and PR into dev/main so problems are caught
-# early (D2 §2.1). Deploy only happens on main (see the deploy job).
+# early (D2 §2.1).
 on:
   push:
     branches:
@@ -80,15 +80,11 @@ jobs:
         run: npm audit --audit-level=high
 
   # ---------------------------------------------------------------------
-  # SAST — static analysis on every PR (SDR4).
-  # NOTE: currently report-only (continue-on-error) so it doesn't block the
-  # team before findings are triaged. Flip continue-on-error to false to make
-  # it blocking on high/critical, as SDR4 ultimately requires.
+  # SAST — static analysis on every PR (SDR4). Serious findings fail CI.
   # ---------------------------------------------------------------------
   sast:
     name: SAST (Semgrep)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -98,33 +94,15 @@ jobs:
       - name: Run Semgrep
         run: semgrep --config p/javascript --config p/typescript --config p/security-audit --error
 
-  # ---------------------------------------------------------------------
-  # Deploy to AWS EC2 — ONLY on push to main (D2 §2.2 auto-trigger evidence).
-  # PLACEHOLDER: the deploy (nginx/TLS/deploy) workstream fills in the real
-  # SSH deploy. Real secrets (EC2 host/user/key) go in GitHub repo secrets,
-  # never in this file (SDR3).
-  # ---------------------------------------------------------------------
-  deploy:
-    name: Deploy to EC2
+  secret-scan:
+    name: Secret scan (Gitleaks)
     runs-on: ubuntu-latest
-    needs: [backend, frontend]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Placeholder deploy step
-        run: |
-          echo "Deploy job runs only on main."
-          echo "TODO (deploy workstream): SSH to EC2 and run:"
-          echo "  git pull && docker compose up -d --build"
-      # Example real deploy (uncomment + configure secrets when ready):
-      # - name: Deploy over SSH
-      #   uses: appleboy/ssh-action@v1
-      #   with:
-      #     host: ${{ secrets.EC2_HOST }}
-      #     username: ${{ secrets.EC2_USER }}
-      #     key: ${{ secrets.EC2_SSH_KEY }}
-      #     script: |
-      #       cd ~/HealthNexusSSD
-      #       git pull origin main
-      #       docker compose up -d --build
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

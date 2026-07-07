@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { apiDelete, apiGet, apiPost, apiUploadRaw } from '../lib/api';
+import { apiDelete, apiGet, apiPatch, apiPost, apiUploadRaw } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 
 const CATEGORY_OPTIONS = [
@@ -21,15 +21,10 @@ const ROLE_COPY = {
     title: 'Released Patient Documents',
     subtitle: 'Open only records that have already been released to your account and request access when additional patient documentation is clinically required.',
   },
-  pharmacist: {
-    badge: 'Clinical Access',
-    title: 'Released Supporting Documents',
-    subtitle: 'Access released supporting records relevant to dispensing and medication review, and monitor the outcome of your document requests.',
-  },
   admin: {
     badge: 'Controlled Access',
     title: 'Document Access Requests',
-    subtitle: 'Track your request activity and open only the records that have been explicitly released to your account.',
+    subtitle: 'Review access activity and open only records released to your account for approved operational review.',
   },
 };
 
@@ -126,10 +121,16 @@ export default function Documents() {
   const roleCopy = ROLE_COPY[user.role] ?? ROLE_COPY.patient;
   const isPatient = user.role === 'patient';
   const isDoctor = user.role === 'doctor';
+  const canRequestAccess = user.role === 'doctor' || user.role === 'admin';
   const canUpload = isPatient || isDoctor;
 
   const [documents, setDocuments] = useState([]);
   const [requests, setRequests] = useState([]);
+  const [requestablePatients, setRequestablePatients] = useState([]);
+  const [requestableRecords, setRequestableRecords] = useState([]);
+  const [patientSearch, setPatientSearch] = useState('');
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [selectedRecord, setSelectedRecord] = useState(null);
   const [uploadForm, setUploadForm] = useState({
     patientId: '',
     file: null,
@@ -179,6 +180,19 @@ export default function Documents() {
     setRequests(data.items || []);
   }
 
+  async function refreshRequestablePatients(search = patientSearch) {
+    if (!canRequestAccess) return;
+    const query = search.trim() ? `?search=${encodeURIComponent(search.trim())}` : '';
+    const data = await apiGet(`/documents/requestable-patients${query}`);
+    setRequestablePatients(data.items || []);
+  }
+
+  async function refreshRequestableRecords(patientId) {
+    if (!canRequestAccess || !patientId) return;
+    const data = await apiGet(`/documents/requestable-patients/${patientId}/records`);
+    setRequestableRecords(data.items || []);
+  }
+
   useEffect(() => {
     let active = true;
 
@@ -188,6 +202,7 @@ export default function Documents() {
         setError('');
         const tasks = [refreshRequests()];
         if (isPatient || isDoctor) tasks.unshift(refreshDocuments());
+        if (canRequestAccess) tasks.push(refreshRequestablePatients());
         await Promise.all(tasks);
       } catch (err) {
         if (active) setError(err.message || 'Unable to load medical documents.');
@@ -200,7 +215,24 @@ export default function Documents() {
     return () => {
       active = false;
     };
-  }, [isDoctor, isPatient]);
+  }, [canRequestAccess, isDoctor, isPatient]);
+
+  useEffect(() => {
+    if (!canRequestAccess) return;
+    const timeout = window.setTimeout(() => {
+      refreshRequestablePatients(patientSearch);
+    }, 200);
+    return () => window.clearTimeout(timeout);
+  }, [canRequestAccess, patientSearch]);
+
+  useEffect(() => {
+    if (!selectedPatient) {
+      setRequestableRecords([]);
+      setSelectedRecord(null);
+      return;
+    }
+    refreshRequestableRecords(selectedPatient.id);
+  }, [selectedPatient]);
 
   async function onUpload(e) {
     e.preventDefault();
@@ -257,8 +289,16 @@ export default function Documents() {
 
   async function onCreateRequest(e) {
     e.preventDefault();
-    if (!requestForm.documentId.trim()) {
-      setError('Please enter the record ID you need access to.');
+    if (!selectedPatient) {
+      setError('Please choose a patient from the suggestions.');
+      return;
+    }
+    if (!selectedRecord) {
+      setError('Please choose a medical record from the suggestions.');
+      return;
+    }
+    if (!requestForm.reason.trim()) {
+      setError('Please enter why access is required.');
       return;
     }
 
@@ -266,15 +306,33 @@ export default function Documents() {
       setBusy(true);
       setError('');
       setNotice('');
-      await apiPost(`/documents/${requestForm.documentId.trim()}/requests`, {
-        reason: requestForm.reason.trim() || undefined,
+      await apiPost(`/documents/${selectedRecord.id}/requests`, {
+        reason: requestForm.reason.trim(),
       });
-      const requestedId = requestForm.documentId.trim();
       await refreshRequests();
+      await refreshRequestablePatients();
+      if (selectedPatient) await refreshRequestableRecords(selectedPatient.id);
       setRequestForm({ documentId: '', reason: '' });
-      setNotice(`Access request submitted for record #${requestedId}.`);
+      setSelectedRecord(null);
+      setNotice(`Access request submitted for record #${selectedRecord.id}.`);
     } catch (err) {
       setError(err.message || 'Unable to submit the request.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onReviewRequest(requestId, status) {
+    try {
+      setBusy(true);
+      setError('');
+      setNotice('');
+      await apiPatch(`/documents/requests/${requestId}`, { status });
+      await refreshRequests();
+      await refreshDocuments();
+      setNotice(`Access request #${requestId} ${status}.`);
+    } catch (err) {
+      setError(err.message || 'Unable to review the access request.');
     } finally {
       setBusy(false);
     }
@@ -290,6 +348,100 @@ export default function Documents() {
     setError('');
     setNotice('Opening document preview.');
     openDocumentUrl(`/api/documents/${documentId}/preview`, '_blank');
+  }
+
+  function renderRequestAccessForm(idPrefix = 'request') {
+    return (
+      <form onSubmit={onCreateRequest}>
+        <div className="hn-doc-picker">
+          <div className="hn-field">
+            <label className="hn-label" htmlFor={`${idPrefix}-patient-search`}>Patient</label>
+            <input
+              id={`${idPrefix}-patient-search`}
+              className="hn-input"
+              value={patientSearch}
+              onChange={(e) => {
+                setPatientSearch(e.target.value);
+                setSelectedPatient(null);
+                setSelectedRecord(null);
+              }}
+              placeholder="Search patient name, ID, or email"
+            />
+            <div className="hn-picker-list" role="listbox" aria-label="Patient suggestions">
+              {requestablePatients.map((patient) => (
+                <button
+                  key={patient.id}
+                  type="button"
+                  className={`hn-picker-option ${selectedPatient?.id === patient.id ? 'selected' : ''}`}
+                  onClick={() => {
+                    setSelectedPatient(patient);
+                    setPatientSearch(`${patient.fullName} (${patient.email})`);
+                    setSelectedRecord(null);
+                  }}
+                >
+                  <strong>{patient.fullName}</strong>
+                  <span>ID #{patient.id} | {patient.email}</span>
+                </button>
+              ))}
+              {requestablePatients.length === 0 && (
+                <div className="hn-picker-empty">No selectable patients found.</div>
+              )}
+            </div>
+          </div>
+
+          <div className="hn-field">
+            <label className="hn-label" htmlFor={`${idPrefix}-record-select`}>Medical record</label>
+            <div className="hn-picker-list" id={`${idPrefix}-record-select`} role="listbox" aria-label="Medical record suggestions">
+              {requestableRecords.map((record) => (
+                <button
+                  key={record.id}
+                  type="button"
+                  className={`hn-picker-option ${selectedRecord?.id === record.id ? 'selected' : ''}`}
+                  onClick={() => setSelectedRecord(record)}
+                  disabled={!selectedPatient}
+                >
+                  <strong>#{record.id} - {record.originalName}</strong>
+                  <span>{formatCategory(record.category)} | {formatDate(record.createdAt)}</span>
+                </button>
+              ))}
+              {!selectedPatient && (
+                <div className="hn-picker-empty">Choose a patient first.</div>
+              )}
+              {selectedPatient && requestableRecords.length === 0 && (
+                <div className="hn-picker-empty">No active records available for this patient.</div>
+              )}
+            </div>
+          </div>
+
+          <div className="hn-field">
+            <label className="hn-label" htmlFor={`${idPrefix}-reason`}>Access reason</label>
+            <input
+              id={`${idPrefix}-reason`}
+              className="hn-input"
+              value={requestForm.reason}
+              onChange={(e) => setRequestForm((prev) => ({ ...prev, reason: e.target.value }))}
+              placeholder="State why this record is required"
+            />
+          </div>
+
+          <button type="submit" className="hn-btn hn-btn-primary" disabled={busy || !selectedPatient || !selectedRecord}>
+            Submit request
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  if (user.role === 'pharmacist') {
+    return (
+      <div className="hn-page">
+        <span className="hn-badge">Fulfilment Access</span>
+        <h1 style={{ margin: '1rem 0 0.25rem' }}>Medical Documents Unavailable</h1>
+        <p className="hn-text-muted" style={{ marginTop: 0, maxWidth: '54rem' }}>
+          Pharmacist access is limited to prescription fulfilment. Use the Fulfilment Queue for dispensing work.
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -318,9 +470,74 @@ export default function Documents() {
         <>
           <div className="hn-doc-summary-grid" style={{ marginTop: '1.5rem' }}>
             <SummaryCard label="Records" value={documents.length} hint="Stored in your account" />
-            <SummaryCard label="Pending Requests" value={pendingRequests.length} hint="Awaiting review in the system" />
+            <SummaryCard label="Pending Requests" value={pendingRequests.length} hint="Awaiting your decision" />
             <SummaryCard label="Shared Records" value={sharedRecordsCount} hint="Currently released to staff" />
           </div>
+
+          <section className="hn-card" style={{ marginTop: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <div>
+                <h2 style={{ marginTop: 0 }}>Pending Access Requests</h2>
+                <p className="hn-text-muted" style={{ marginTop: '0.35rem' }}>
+                  Approve or deny staff requests before they can open your medical records.
+                </p>
+              </div>
+              <div className="hn-text-muted" style={{ fontWeight: 700 }}>
+                {pendingRequests.length} waiting
+              </div>
+            </div>
+
+            <div className="hn-table-wrap">
+              <table className="hn-table">
+                <thead>
+                  <tr>
+                    <th>Request</th>
+                    <th>Record</th>
+                    <th>Requested By</th>
+                    <th>Reason</th>
+                    <th>Submitted</th>
+                    <th>Decision</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingRequests.map((item) => (
+                    <tr key={item.id}>
+                      <td>#{item.id}</td>
+                      <td>#{item.documentId}<br /><span className="hn-text-muted">{item.documentTitle || 'Medical record'}</span></td>
+                      <td>{item.requesterName || safeRoleName(item.requestedRole)}<br /><span className="hn-text-muted">{safeRoleName(item.requestedRole)}</span></td>
+                      <td>{item.reason || 'No reason recorded'}</td>
+                      <td>{formatDateTime(item.createdAt)}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="hn-btn hn-btn-primary"
+                            disabled={busy}
+                            onClick={() => onReviewRequest(item.id, 'approved')}
+                          >
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            className="hn-btn hn-btn-outline"
+                            disabled={busy}
+                            onClick={() => onReviewRequest(item.id, 'denied')}
+                          >
+                            Deny
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {pendingRequests.length === 0 && (
+                    <tr>
+                      <td colSpan="6" className="hn-text-muted">No pending access requests.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
 
           <div className="hn-doc-grid hn-doc-grid-patient" style={{ marginTop: '1.5rem' }}>
             <section className="hn-card">
@@ -444,20 +661,35 @@ export default function Documents() {
                       <th>Requester</th>
                       <th>Status</th>
                       <th>Reviewed</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {requests.map((item) => (
+                    {closedRequests.map((item) => (
                       <tr key={item.id}>
-                        <td>Record #{item.documentId}</td>
-                        <td>{safeRoleName(item.requestedRole)}</td>
+                        <td>Record #{item.documentId}<br /><span className="hn-text-muted">{item.documentTitle || 'Medical record'}</span></td>
+                        <td>{item.requesterName || safeRoleName(item.requestedRole)}<br /><span className="hn-text-muted">{safeRoleName(item.requestedRole)}</span></td>
                         <td><StatusPill status={item.status} /></td>
                         <td>{formatDate(item.reviewedAt)}</td>
+                        <td>
+                          {item.status === 'approved' ? (
+                            <button
+                              type="button"
+                              className="hn-btn hn-btn-outline"
+                              disabled={busy}
+                              onClick={() => onReviewRequest(item.id, 'revoked')}
+                            >
+                              Revoke
+                            </button>
+                          ) : (
+                            <span className="hn-text-muted">No action</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
-                    {requests.length === 0 && (
+                    {closedRequests.length === 0 && (
                       <tr>
-                        <td colSpan="4" className="hn-text-muted">No sharing activity available.</td>
+                        <td colSpan="5" className="hn-text-muted">No reviewed sharing activity yet.</td>
                       </tr>
                     )}
                   </tbody>
@@ -465,41 +697,6 @@ export default function Documents() {
               </div>
             </section>
           </div>
-
-          <section className="hn-card" style={{ marginTop: '1.5rem' }}>
-            <h2 style={{ marginTop: 0 }}>Previous Decisions</h2>
-            <p className="hn-text-muted" style={{ marginTop: '0.35rem' }}>
-              Review previous approvals and denials linked to your records.
-            </p>
-
-            <div className="hn-table-wrap">
-              <table className="hn-table">
-                <thead>
-                  <tr>
-                    <th>Document</th>
-                    <th>Requester</th>
-                    <th>Status</th>
-                    <th>Reason</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {closedRequests.map((item) => (
-                    <tr key={item.id}>
-                      <td>Record #{item.documentId}</td>
-                      <td>{safeRoleName(item.requestedRole)}</td>
-                      <td><StatusPill status={item.status} /></td>
-                      <td>{item.reason || 'No reason recorded'}</td>
-                    </tr>
-                  ))}
-                  {closedRequests.length === 0 && (
-                    <tr>
-                      <td colSpan="4" className="hn-text-muted">No previous decisions available.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
         </>
       ) : (
         <>
@@ -574,30 +771,7 @@ export default function Documents() {
                   </button>
                 </form>
               ) : (
-                <form onSubmit={onCreateRequest}>
-                  <div className="hn-doc-request-form">
-                    <div className="hn-field" style={{ marginBottom: 0 }}>
-                      <label className="hn-label" htmlFor="request-document-id">Record ID</label>
-                      <input
-                        id="request-document-id"
-                        className="hn-input"
-                        value={requestForm.documentId}
-                        onChange={(e) => setRequestForm((prev) => ({ ...prev, documentId: e.target.value }))}
-                      />
-                    </div>
-                    <div className="hn-field" style={{ marginBottom: 0 }}>
-                      <label className="hn-label" htmlFor="request-reason">Access reason</label>
-                      <input
-                        id="request-reason"
-                        className="hn-input"
-                        value={requestForm.reason}
-                        onChange={(e) => setRequestForm((prev) => ({ ...prev, reason: e.target.value }))}
-                        placeholder="State why this record is required"
-                      />
-                    </div>
-                    <button type="submit" className="hn-btn hn-btn-primary" disabled={busy}>Submit request</button>
-                  </div>
-                </form>
+                renderRequestAccessForm('admin-request')
               )}
             </section>
 
@@ -614,7 +788,7 @@ export default function Documents() {
                   <thead>
                     <tr>
                       <th>{isDoctor ? 'Document' : 'Record'}</th>
-                      <th>{isDoctor ? 'Patient ID' : 'Released To'}</th>
+                      <th>{isDoctor ? 'Patient ID' : 'Patient'}</th>
                       <th>{isDoctor ? 'Type' : 'Status'}</th>
                       <th>{isDoctor ? 'Uploaded' : 'Reviewed'}</th>
                       <th>Actions</th>
@@ -623,8 +797,8 @@ export default function Documents() {
                   <tbody>
                     {(isDoctor ? documents : releasedRequests).map((item) => (
                       <tr key={item.id}>
-                        <td>{isDoctor ? item.originalName : `#${item.documentId}`}</td>
-                        <td>{isDoctor ? `#${item.patientId}` : safeRoleName(item.requestedRole)}</td>
+                        <td>{isDoctor ? item.originalName : `#${item.documentId} - ${item.documentTitle || 'Medical record'}`}</td>
+                        <td>{isDoctor ? `#${item.patientId}` : `${item.patientName || 'Patient'} (#${item.patientId || 'N/A'})`}</td>
                         <td>{isDoctor ? formatCategory(item.category) : <StatusPill status={item.status} />}</td>
                         <td>{isDoctor ? formatDate(item.createdAt) : formatDate(item.reviewedAt)}</td>
                         <td>
@@ -662,30 +836,7 @@ export default function Documents() {
                 Request access only when you need to view documents that were not uploaded by your own account.
               </p>
 
-              <form onSubmit={onCreateRequest}>
-                <div className="hn-doc-request-form">
-                  <div className="hn-field" style={{ marginBottom: 0 }}>
-                    <label className="hn-label" htmlFor="doctor-request-document-id">Record ID</label>
-                    <input
-                      id="doctor-request-document-id"
-                      className="hn-input"
-                      value={requestForm.documentId}
-                      onChange={(e) => setRequestForm((prev) => ({ ...prev, documentId: e.target.value }))}
-                    />
-                  </div>
-                  <div className="hn-field" style={{ marginBottom: 0 }}>
-                    <label className="hn-label" htmlFor="doctor-request-reason">Access reason</label>
-                    <input
-                      id="doctor-request-reason"
-                      className="hn-input"
-                      value={requestForm.reason}
-                      onChange={(e) => setRequestForm((prev) => ({ ...prev, reason: e.target.value }))}
-                      placeholder="State why this record is required"
-                    />
-                  </div>
-                  <button type="submit" className="hn-btn hn-btn-primary" disabled={busy}>Submit request</button>
-                </div>
-              </form>
+              {renderRequestAccessForm('doctor-request')}
             </section>
           )}
 
@@ -701,7 +852,7 @@ export default function Documents() {
                   <tr>
                     <th>Request</th>
                     <th>Record</th>
-                    <th>Submitted As</th>
+                    <th>Patient</th>
                     <th>Status</th>
                     <th>Reason</th>
                   </tr>
@@ -710,8 +861,8 @@ export default function Documents() {
                   {requests.map((item) => (
                     <tr key={item.id}>
                       <td>#{item.id}</td>
-                      <td>#{item.documentId}</td>
-                      <td>{safeRoleName(item.requestedRole)}</td>
+                      <td>#{item.documentId}<br /><span className="hn-text-muted">{item.documentTitle || 'Medical record'}</span></td>
+                      <td>{item.patientName || 'Patient'}<br /><span className="hn-text-muted">{item.patientEmail || `#${item.patientId || 'N/A'}`}</span></td>
                       <td><StatusPill status={item.status} /></td>
                       <td>{item.reason || 'No reason recorded'}</td>
                     </tr>

@@ -31,23 +31,23 @@ export default function Login() {
   };
 
   return (
-    <div className="hn-auth">
-      {/* Left brand panel (hidden on mobile) */}
+    <div className="hn-auth hn-auth-clinic">
       <aside className="hn-auth__brand">
-        <h1>Welcome back</h1>
-        <p>Sign in to access your appointments, records, and prescriptions — securely.</p>
+        <span className="hn-auth-kicker">Secure patient portal</span>
+        <h1>Welcome back to your digital clinic.</h1>
+        <p>Sign in to manage appointments, medical documents, and prescriptions with patient-controlled sharing.</p>
         <ul className="hn-auth__points">
-          <li>🔒 Encrypted, role-based access to your health data</li>
-          <li>📋 Every record access is logged for your safety</li>
-          <li>⚕️ Trusted by patients, doctors, and pharmacists</li>
+          <li><span>01</span> Review document access requests before sharing</li>
+          <li><span>02</span> Keep prescriptions and appointments together</li>
+          <li><span>03</span> Every sensitive action is audit logged</li>
         </ul>
       </aside>
 
-      {/* Right form */}
       <section className="hn-auth__form">
         <div className="hn-auth__form-inner">
-          <h2 className="hn-auth__title">Sign in</h2>
-          <p className="hn-auth__subtitle">Enter your credentials to continue.</p>
+          <span className="hn-badge">Patient-friendly access</span>
+          <h2 className="hn-auth__title">Sign in securely</h2>
+          <p className="hn-auth__subtitle">Use your HealthNexus account to continue.</p>
 
           {error && (
             <div className="hn-card" style={{ borderColor: 'var(--hn-danger)', padding: '0.75rem 1rem', marginBottom: '1rem' }}>

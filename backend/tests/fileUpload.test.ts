@@ -30,4 +30,10 @@ describe('validateUpload', () => {
     expect(result.ok).toBe(false);
     expect(result.reason).toMatch(/extension/i);
   });
+
+  it('rejects filenames that can break paths or response headers', () => {
+    expect(validateUpload('../report.pdf', PDF).ok).toBe(false);
+    expect(validateUpload('report\r\nSet-Cookie: bad=1.pdf', PDF).ok).toBe(false);
+    expect(validateUpload('"report".pdf', PDF).ok).toBe(false);
+  });
 });

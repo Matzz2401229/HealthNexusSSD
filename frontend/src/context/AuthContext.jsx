@@ -34,14 +34,17 @@ export function AuthProvider({ children }) {
     setUser(null);
   }
 
+  function updateUser(patch) {
+    setUser((current) => (current ? { ...current, ...patch } : current));
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   return useContext(AuthContext);
 }

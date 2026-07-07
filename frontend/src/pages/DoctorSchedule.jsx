@@ -1,15 +1,11 @@
 import { useState, useEffect } from 'react';
-
-function getCsrfToken() {
-    const match = document.cookie.match(new RegExp('(^| )csrf_token=([^;]+)'));
-    return match ? match[2] : '';
-}
+import { ensureCsrfToken } from '../lib/api';
 
 async function apiFetch(url, options = {}) {
+    const isUnsafe = ['POST', 'PUT', 'PATCH', 'DELETE'].includes((options.method || 'GET').toUpperCase());
     const headers = {
         'Content-Type': 'application/json',
-        'x-csrf-token': getCsrfToken(),
-        'x-mock-role': 'doctor', // Forces backend mock to treat us as a doctor
+        ...(isUnsafe ? { 'x-csrf-token': await ensureCsrfToken() } : {}),
         ...options.headers,
     };
     return fetch(`/api${url}`, { ...options, headers, credentials: 'include' });

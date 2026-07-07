@@ -8,16 +8,22 @@
 const BASE = '/api';
 
 /**
- * Anti-CSRF token for state-changing requests (double-submit, FSR12): the
- * server compares this cookie against the x-csrf-token header. We provision one
- * client-side; SameSite=Strict is what actually blocks cross-site requests.
+ * Anti-CSRF token for state-changing requests: the server issues a token,
+ * stores its hash in the server-side session, and compares the readable cookie
+ * against the x-csrf-token header.
  */
 export function getCsrfToken() {
   const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
   if (match) return decodeURIComponent(match[1]);
-  const token = crypto.randomUUID();
-  document.cookie = `csrf_token=${token}; path=/; SameSite=Strict`;
-  return token;
+  return '';
+}
+
+export async function ensureCsrfToken() {
+  // Always refresh before unsafe requests. A browser can keep an old readable
+  // csrf_token after Docker/backend restarts while the server-side session hash
+  // is gone; reissuing keeps the cookie/header/session triplet in sync.
+  const data = await apiGet('/auth/csrf');
+  return data.csrfToken || getCsrfToken();
 }
 
 async function parse(res) {
@@ -35,37 +41,39 @@ export async function apiGet(path) {
 }
 
 export async function apiPost(path, body) {
-  const token = getCsrfToken();
+  const token = await ensureCsrfToken();
 
   return parse(
     await fetch(`${BASE}${path}`, {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': token },
       body: JSON.stringify(body ?? {}),
     }),
   );
 }
 
 export async function apiPatch(path, body) {
+  const token = await ensureCsrfToken();
   return parse(
     await fetch(`${BASE}${path}`, {
       method: 'PATCH',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': token },
       body: JSON.stringify(body ?? {}),
     }),
   );
 }
 
 export async function apiUploadRaw(path, file, headers = {}) {
+  const token = await ensureCsrfToken();
   return parse(
     await fetch(`${BASE}${path}`, {
       method: 'POST',
       credentials: 'include',
       headers: {
         'Content-Type': file.type || 'application/octet-stream',
-        'x-csrf-token': getCsrfToken(),
+        'x-csrf-token': token,
         ...headers,
       },
       body: file,
@@ -94,22 +102,24 @@ export async function apiDownload(path) {
 }
 
 export async function apiDelete(path) {
+  const token = await ensureCsrfToken();
   return parse(
     await fetch(`${BASE}${path}`, {
       method: 'DELETE',
       credentials: 'include',
-      headers: { 'x-csrf-token': getCsrfToken() },
+      headers: { 'x-csrf-token': token },
     }),
   );
 }
 
-export async function apiPut(url, body) {
-  const res = await fetch(url, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) throw new Error("Request failed");
-  return res.json();
+export async function apiPut(path, body) {
+  const token = await ensureCsrfToken();
+  return parse(
+    await fetch(`${BASE}${path}`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': token },
+      body: JSON.stringify(body ?? {}),
+    }),
+  );
 }
