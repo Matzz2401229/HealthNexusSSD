@@ -12,7 +12,7 @@ type SeededDocument = {
   description: string | null;
 };
 
-const SEEDED_DOCUMENT_IDS = [1, 2, 3, 4, 5, 6];
+const SEEDED_DOCUMENT_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
 function escapePdfText(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');

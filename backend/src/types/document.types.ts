@@ -32,6 +32,13 @@ export interface DocumentRequestRecord {
   reviewed_at: string | null;
   created_at: string;
   updated_at: string;
+  requester_name?: string | null;
+  requester_email?: string | null;
+  document_title?: string | null;
+  document_category?: DocumentCategory | null;
+  patient_id?: number | null;
+  patient_name?: string | null;
+  patient_email?: string | null;
 }
 
 export interface UploadDocumentInput {
@@ -62,4 +69,19 @@ export interface DeleteDocumentInput {
   documentId: number;
   actorId: number;
   actorRole: Role;
+}
+
+export interface RequestablePatientRecord {
+  id: number;
+  full_name: string;
+  email: string;
+}
+
+export interface RequestableDocumentRecord {
+  id: number;
+  patient_id: number;
+  original_name: string;
+  category: DocumentCategory;
+  description: string | null;
+  created_at: string;
 }

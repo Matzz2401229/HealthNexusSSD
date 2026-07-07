@@ -47,6 +47,7 @@ interface UserAuthRow extends RowDataPacket {
   is_active: number; // MySQL BOOLEAN comes back as 0/1
   failed_logins: number;
   locked_until: Date | null;
+  full_name: string | null;
 }
 
 function normaliseEmail(email: string): string {
@@ -217,9 +218,14 @@ export async function login(
   const email = normaliseEmail(rawEmail);
 
   const [rows] = await pool.execute<UserAuthRow[]>(
-    `SELECT id, password_hash, role, is_active, failed_logins, locked_until
-     FROM users
-     WHERE email = ?
+    `SELECT u.id, u.password_hash, u.role, u.is_active, u.failed_logins, u.locked_until,
+            COALESCE(p.full_name, d.full_name, ph.full_name, a.full_name) AS full_name
+     FROM users u
+     LEFT JOIN patient p ON p.id = u.id
+     LEFT JOIN doctor d ON d.id = u.id
+     LEFT JOIN pharmacist ph ON ph.id = u.id
+     LEFT JOIN admin a ON a.id = u.id
+     WHERE u.email = ?
      LIMIT 1`,
     [email],
   );
@@ -249,7 +255,7 @@ export async function login(
 
   // Map the team's is_active boolean onto the session status shape.
   const status: SessionUser['status'] = user.is_active ? 'active' : 'pending';
-  return { id: user.id, role: user.role, status, loginAt: Date.now() }; // NFSR5
+  return { id: user.id, role: user.role, status, fullName: user.full_name, loginAt: Date.now() }; // NFSR5
 }
 
 /** Increment failed-login counter; lock at the threshold (D1 9.1). */

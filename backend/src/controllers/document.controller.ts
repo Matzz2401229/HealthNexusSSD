@@ -6,6 +6,8 @@ import {
   documentIdParamsSchema,
   listDocumentRequestsQuerySchema,
   listDocumentsQuerySchema,
+  requestablePatientParamsSchema,
+  requestablePatientsQuerySchema,
   reviewDocumentRequestBodySchema,
   reviewDocumentRequestParamsSchema,
   uploadDocumentHeadersSchema,
@@ -56,6 +58,28 @@ export async function listDocuments(req: Request, res: Response, next: NextFunct
     const query = listDocumentsQuerySchema.parse(req.query);
     const documents = await documentService.listDocuments(user.id, user.role, query.patientId);
     res.json({ items: documents });
+  } catch (err) {
+    handleDocumentError(err, next);
+  }
+}
+
+export async function listRequestablePatients(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const user = assertUser(req);
+    const query = requestablePatientsQuerySchema.parse(req.query);
+    const items = await documentService.listRequestablePatients(user.id, user.role, query.search);
+    res.json({ items });
+  } catch (err) {
+    handleDocumentError(err, next);
+  }
+}
+
+export async function listRequestableDocuments(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const user = assertUser(req);
+    const params = requestablePatientParamsSchema.parse(req.params);
+    const items = await documentService.listRequestableDocuments(user.id, user.role, params.patientId);
+    res.json({ items });
   } catch (err) {
     handleDocumentError(err, next);
   }

@@ -29,11 +29,10 @@ const QUICK_ACTIONS = {
     { to: '/prescriptions/new', title: 'Issue Prescription', desc: 'Prescribe medication for a patient you treat.' },
   ],
   pharmacist: [
-    { to: '/documents', title: 'Medical Documents', desc: 'Request and track access to patient-submitted documents.' },
     { to: '/pharmacy', title: 'Fulfilment Queue', desc: 'Review and dispense pending prescriptions.' },
   ],
   admin: [
-    { to: '/documents', title: 'Medical Documents', desc: 'Review document access requests and manage clinical record visibility.' },
+    { to: '/documents', title: 'Medical Documents', desc: 'Review access requests and open only records released for operational review.' },
     { to: '/admin', title: 'Admin Console', desc: 'Approve staff accounts and manage the platform.' },
   ],
 };

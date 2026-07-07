@@ -33,6 +33,8 @@ export interface AuditLogRow extends RowDataPacket {
   target: string | null;
   ip_address: string | null;
   result: string;
+  prev_hash: string | null;
+  entry_hash: string;
   created_at: string;
 }
 
@@ -47,6 +49,18 @@ export interface ActivitySummary {
   activeSessions: number;
   recentLogins: number;
   flaggedEvents: number;
+}
+
+export interface AdminOverview {
+  activeSessions: number;
+  recentLogins: number;
+  flaggedEvents: number;
+  pendingDoctors: number;
+  totalUsers: number;
+  activeUsers: number;
+  pendingDocumentRequests: number;
+  latestAuditEvents: AuditLogRow[];
+  recentRegistrations: UserRow[];
 }
 
 export interface CreateUserInput {
@@ -183,7 +197,7 @@ export async function deleteUser(id: number): Promise<boolean> {
 export async function listAuditLogs(): Promise<AuditLogRow[]> {
   try {
     const [rows] = await pool.execute<AuditLogRow[]>(
-      `SELECT id, user_id, role, action, target, ip_address, result, created_at
+      `SELECT id, user_id, role, action, target, ip_address, result, prev_hash, entry_hash, created_at
        FROM auditlog
        ORDER BY id DESC LIMIT 100`,
     );
@@ -213,6 +227,73 @@ export async function getActivitySummary(): Promise<ActivitySummary> {
   } catch (err) {
     logger.error('Failed to get activity summary', { err });
     return { activeSessions: 0, recentLogins: 0, flaggedEvents: 0 };
+  }
+}
+
+export async function getAdminOverview(): Promise<AdminOverview> {
+  try {
+    const [
+      [activeRows],
+      [recentRows],
+      [flaggedRows],
+      [pendingDoctorRows],
+      [totalUserRows],
+      [activeUserRows],
+      [pendingRequestRows],
+      [latestAuditEvents],
+      [recentRegistrations],
+    ] = await Promise.all([
+      pool.execute<RowDataPacket[]>('SELECT COUNT(*) AS count FROM sessions'),
+      pool.execute<RowDataPacket[]>(
+        'SELECT COUNT(*) AS count FROM auditlog WHERE action = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)',
+        ['login'],
+      ),
+      pool.execute<RowDataPacket[]>(
+        'SELECT COUNT(*) AS count FROM auditlog WHERE result = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)',
+        ['failure'],
+      ),
+      pool.execute<RowDataPacket[]>(
+        "SELECT COUNT(*) AS count FROM users WHERE role = 'doctor' AND approval_status = 'pending'",
+      ),
+      pool.execute<RowDataPacket[]>('SELECT COUNT(*) AS count FROM users'),
+      pool.execute<RowDataPacket[]>('SELECT COUNT(*) AS count FROM users WHERE is_active = TRUE'),
+      pool.execute<RowDataPacket[]>("SELECT COUNT(*) AS count FROM document_request WHERE status = 'pending'"),
+      pool.execute<AuditLogRow[]>(
+        `SELECT id, user_id, role, action, target, ip_address, result, prev_hash, entry_hash, created_at
+         FROM auditlog
+         ORDER BY id DESC LIMIT 5`,
+      ),
+      pool.execute<UserRow[]>(
+        `SELECT id, email, role, is_active, created_at
+         FROM users
+         ORDER BY created_at DESC LIMIT 5`,
+      ),
+    ]);
+
+    return {
+      activeSessions: Number(activeRows[0]?.count ?? 0),
+      recentLogins: Number(recentRows[0]?.count ?? 0),
+      flaggedEvents: Number(flaggedRows[0]?.count ?? 0),
+      pendingDoctors: Number(pendingDoctorRows[0]?.count ?? 0),
+      totalUsers: Number(totalUserRows[0]?.count ?? 0),
+      activeUsers: Number(activeUserRows[0]?.count ?? 0),
+      pendingDocumentRequests: Number(pendingRequestRows[0]?.count ?? 0),
+      latestAuditEvents,
+      recentRegistrations,
+    };
+  } catch (err) {
+    logger.error('Failed to get admin overview', { err });
+    return {
+      activeSessions: 0,
+      recentLogins: 0,
+      flaggedEvents: 0,
+      pendingDoctors: 0,
+      totalUsers: 0,
+      activeUsers: 0,
+      pendingDocumentRequests: 0,
+      latestAuditEvents: [],
+      recentRegistrations: [],
+    };
   }
 }
 

@@ -230,6 +230,15 @@ export async function getActivitySummary(req: Request, res: Response, next: Next
   }
 }
 
+export async function getAdminOverview(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const data = await adminService.getAdminOverview();
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function listAnnouncements(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const data = await adminService.listAnnouncements();

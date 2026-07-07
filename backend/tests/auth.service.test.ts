@@ -116,7 +116,14 @@ describe('registration', () => {
 // Login — authentication rules (SR2, D1 §9.1)
 // ---------------------------------------------------------------------------
 const userRow = (o: Record<string, unknown> = {}) => ({
-  id: 1, password_hash: 'hash', role: 'patient', is_active: 1, failed_logins: 0, locked_until: null, ...o,
+  id: 1,
+  password_hash: 'hash',
+  role: 'patient',
+  is_active: 1,
+  failed_logins: 0,
+  locked_until: null,
+  full_name: 'Patient One',
+  ...o,
 });
 
 describe('login', () => {
@@ -126,7 +133,13 @@ describe('login', () => {
 
     const res = await login('p@x.com', 'pw');
 
-    expect(res).toEqual({ id: 1, role: 'patient', status: 'active', loginAt: expect.any(Number) });
+    expect(res).toEqual({
+      id: 1,
+      role: 'patient',
+      status: 'active',
+      fullName: 'Patient One',
+      loginAt: expect.any(Number),
+    });
   });
 
   it('maps an inactive account to status "pending"', async () => {

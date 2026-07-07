@@ -19,6 +19,7 @@ router.post('/users', requireRole('admin'), adminController.createUser);
 
 router.get('/audit-logs', requireRole('admin'), adminController.listAuditLogs);
 router.get('/activity', requireRole('admin'), adminController.getActivitySummary);
+router.get('/overview', requireRole('admin'), adminController.getAdminOverview);
 
 
 router.post('/announcements', requireRole('admin'), adminController.createAnnouncement);
