@@ -6,18 +6,25 @@ import * as adminController from '../controllers/admin.controller';
 const router = Router();
 
 router.use(requireAuth);
-router.use(requireRole('admin'));
+// router.use(requireRole('admin'));
 
-router.get('/pending-doctors', adminController.listPendingDoctors);
-router.post('/pending-doctors/:id/approve', adminController.approveDoctor);
-router.post('/pending-doctors/:id/reject', adminController.rejectDoctor);
-router.get('/users', adminController.listUsers);
-router.patch('/users/:id/status', adminController.toggleUserStatus);
-router.delete('/users/:id', adminController.removeUser);
-router.get('/audit-logs', adminController.listAuditLogs);
-router.get('/activity', adminController.getActivitySummary);
+router.get('/pending-doctors', requireRole('admin'), adminController.listPendingDoctors);
+router.post('/pending-doctors/:id/approve', requireRole('admin'), adminController.approveDoctor);
+router.post('/pending-doctors/:id/reject', requireRole('admin'),adminController.rejectDoctor);
+
+router.get('/users', requireRole('admin'), adminController.listUsers);
+router.patch('/users/:id/status', requireRole('admin'), adminController.toggleUserStatus);
+router.delete('/users/:id', requireRole('admin'), adminController.removeUser);
+router.post('/users', requireRole('admin'), adminController.createUser);
+
+router.get('/audit-logs', requireRole('admin'), adminController.listAuditLogs);
+router.get('/activity', requireRole('admin'), adminController.getActivitySummary);
+
+
+router.post('/announcements', requireRole('admin'), adminController.createAnnouncement);
+router.patch('/announcements/:id', requireRole('admin'), adminController.updateAnnouncement);
+router.delete('/announcements/:id', requireRole('admin'), adminController.deleteAnnouncement);
+
 router.get('/announcements', adminController.listAnnouncements);
-router.post('/announcements', adminController.createAnnouncement);
-router.patch('/announcements/:id', adminController.updateAnnouncement);
 
 export default router;

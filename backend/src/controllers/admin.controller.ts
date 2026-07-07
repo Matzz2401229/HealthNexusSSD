@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as adminService from '../services/admin.service';
 import { recordAudit } from '../services/audit.service';
+import { validatePasswordPolicy } from '../utils/password';
 
 export async function listPendingDoctors(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -91,7 +92,97 @@ export async function toggleUserStatus(req: Request, res: Response, next: NextFu
       res.status(500).json({ error: 'Failed to update user status.' });
       return;
     }
+
+    await recordAudit({
+      userId: req.session.user?.id ?? null,
+      role: req.session.user?.role ?? null,
+      action: isActive ? 'admin.reactivate_user' : 'admin.suspend_user',
+      target: `user:${id}`,
+      ip: req.ip,
+      result: 'success',
+    });
+
     res.json({ message: 'User status updated.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function createUser(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const {
+      name,
+      email,
+      password,
+      role,
+      dateOfBirth,
+      specialty,
+      pharmacy,
+    } = req.body;
+
+    // Common required fields
+    if (!name || !email || !password || !role) {
+      res.status(400).json({ error: 'All fields are required.' });
+      return;
+    }
+
+    // Role-specific required fields
+    if (role === 'patient' && !dateOfBirth) {
+      res.status(400).json({ error: 'Date of birth is required.' });
+      return;
+    }
+
+    if (role === 'doctor' && !specialty) {
+      res.status(400).json({ error: 'Specialty is required.' });
+      return;
+    }
+
+    if (role === 'pharmacist' && !pharmacy) {
+      res.status(400).json({ error: 'Pharmacy is required.' });
+      return;
+    }
+
+    const passwordErrors = validatePasswordPolicy(password);
+
+    if (passwordErrors.length > 0) {
+      res.status(400).json({
+        error: passwordErrors.join(' ')
+      });
+      return;
+    }
+
+    const ok = await adminService.createUser({
+      name,
+      email,
+      password,
+      role,
+      dateOfBirth,
+      specialty,
+      pharmacy,
+    });
+
+    if (!ok) {
+      res.status(500).json({ error: 'Failed to create user.' });
+      return;
+    }
+
+    await recordAudit({
+      userId: req.session.user?.id ?? null,
+      role: req.session.user?.role ?? null,
+      action: 'admin.create_user',
+      target: email,
+      ip: req.ip,
+      result: 'success',
+    });
+
+    res.status(201).json({
+      message: 'User created.',
+    });
+
   } catch (err) {
     next(err);
   }
@@ -105,6 +196,16 @@ export async function removeUser(req: Request, res: Response, next: NextFunction
       res.status(500).json({ error: 'Failed to remove user.' });
       return;
     }
+
+    await recordAudit({
+      userId: req.session.user?.id ?? null,
+      role: req.session.user?.role ?? null,
+      action: 'admin.delete_user',
+      target: `user:${id}`,
+      ip: req.ip,
+      result: 'success',
+    });
+
     res.json({ message: 'User removed.' });
   } catch (err) {
     next(err);
@@ -150,6 +251,16 @@ export async function createAnnouncement(req: Request, res: Response, next: Next
       res.status(500).json({ error: 'Failed to publish announcement.' });
       return;
     }
+
+    await recordAudit({
+      userId: req.session.user?.id ?? null,
+      role: req.session.user?.role ?? null,
+      action: 'admin.create_announcement',
+      target: `announcement:${title}`,
+      ip: req.ip,
+      result: 'success',
+    });
+
     res.status(201).json({ message: 'Announcement published.' });
   } catch (err) {
     next(err);
@@ -169,7 +280,44 @@ export async function updateAnnouncement(req: Request, res: Response, next: Next
       res.status(500).json({ error: 'Failed to update announcement.' });
       return;
     }
+
+    await recordAudit({
+      userId: req.session.user?.id ?? null,
+      role: req.session.user?.role ?? null,
+      action: 'admin.update_announcement',
+      target: `announcement:id=${id}|title=${title}`,
+      ip: req.ip,
+      result: 'success',
+    });
+    
     res.json({ message: 'Announcement updated.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+
+export async function deleteAnnouncement(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const id = Number(req.params.id);
+
+    const ok = await adminService.deleteAnnouncement(id);
+
+    if (!ok) {
+      res.status(500).json({ error: 'Failed to delete announcement.' });
+      return;
+    }
+
+    await recordAudit({
+      userId: req.session.user?.id ?? null,
+      role: req.session.user?.role ?? null,
+      action: 'admin.delete_announcement',
+      target: `announcement:id=${id}`,
+      ip: req.ip,
+      result: 'success',
+    });
+
+    res.json({ message: 'Announcement deleted.' });
   } catch (err) {
     next(err);
   }

@@ -1,5 +1,5 @@
 import 'express-session';
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { AppError } from '../utils/AppError';
 import { validatePasswordPolicy } from '../utils/password';
@@ -103,51 +103,62 @@ export async function registerPharmacist(req: Request, res: Response): Promise<v
 }
 
 /** POST /api/auth/login  (FR3, SR2) */
-export async function login(req: Request, res: Response): Promise<void> {
+export async function login(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   const parsed = loginSchema.safeParse(req.body);
+
   if (!parsed.success) {
     throw new AppError(400, 'Invalid request.');
   }
 
-  let sessionUser: Awaited<ReturnType<typeof authService.login>>;
-
   try {
-    sessionUser = await authService.login(parsed.data.email, parsed.data.password);
+    const sessionUser = await authService.login(
+      parsed.data.email,
+      parsed.data.password,
+    );
+
+    await new Promise<void>((resolve, reject) => {
+      req.session.regenerate((err) => (err ? reject(err) : resolve()));
+    });
+
+    req.session.user = sessionUser;
+
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err) => (err ? reject(err) : resolve()));
+    });
+
+    attachCsrfToken(res);
+
+    await recordAudit({
+      userId: sessionUser.id,
+      role: sessionUser.role,
+      action: 'login',
+      target: parsed.data.email,
+      ip: req.ip,
+      result: 'success',
+    });
+
+    res.status(200).json({
+      message: 'Login successful.',
+      user: sessionUser,
+    });
+
   } catch (err) {
+
     await recordAudit({
       userId: null,
       role: null,
-      action: 'auth.login',
-      target: 'auth/login',
+      action: 'login',
+      target: parsed.data.email,
       ip: req.ip,
       result: 'failure',
     });
 
-    throw err;
+    next(err);
   }
-
-  await new Promise<void>((resolve, reject) => {
-    req.session.regenerate((err) => (err ? reject(err) : resolve()));
-  });
-
-  req.session.user = sessionUser;
-
-  await new Promise<void>((resolve, reject) => {
-    req.session.save((err) => (err ? reject(err) : resolve()));
-  });
-
-  attachCsrfToken(res);
-
-  await recordAudit({
-    userId: sessionUser.id,
-    role: sessionUser.role,
-    action: 'auth.login',
-    target: `user:${sessionUser.id}`,
-    ip: req.ip,
-    result: 'success',
-  });
-
-  res.status(200).json({ message: 'Login successful.', user: sessionUser });
 }
 
 /** POST /api/auth/logout  (D1 9.1: server-side session invalidation) */

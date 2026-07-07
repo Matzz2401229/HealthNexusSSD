@@ -1,6 +1,12 @@
 import { RowDataPacket } from 'mysql2';
 import { pool } from '../db/pool';
 import { logger } from '../utils/logger';
+import {
+  registerPatient,
+  registerDoctor,
+  registerPharmacist,
+  registerAdmin,
+} from './auth.service';
 
 export interface DoctorRegistrationRow extends RowDataPacket {
   id: number;
@@ -43,6 +49,16 @@ export interface ActivitySummary {
   flaggedEvents: number;
 }
 
+export interface CreateUserInput {
+  name: string;
+  email: string;
+  password: string;
+  role: 'patient' | 'doctor' | 'pharmacist' | 'admin';
+  dateOfBirth?: string;
+  specialty?: string;
+  pharmacy?: string;
+}
+
 export async function listPendingDoctors(): Promise<DoctorRegistrationRow[]> {
   try {
     const [rows] = await pool.execute<DoctorRegistrationRow[]>(
@@ -79,6 +95,53 @@ export async function rejectDoctor(id: number): Promise<boolean> {
     return true;
   } catch (err) {
     logger.error('Failed to reject doctor registration', { err, id });
+    return false;
+  }
+}
+
+export async function createUser(input: CreateUserInput): Promise<boolean> {
+  try {
+    switch (input.role) {
+      case 'patient':
+        await registerPatient({
+          name: input.name,
+          email: input.email,
+          password: input.password,
+          dateOfBirth: input.dateOfBirth!,
+        });
+        break;
+
+      case 'doctor':
+        await registerDoctor({
+          name: input.name,
+          email: input.email,
+          password: input.password,
+          specialty: input.specialty,
+        });
+        break;
+
+      case 'pharmacist':
+        await registerPharmacist({
+          name: input.name,
+          email: input.email,
+          password: input.password,
+          pharmacy: input.pharmacy,
+        });
+        break;
+
+      case 'admin':
+        await registerAdmin({
+          name: input.name,
+          email: input.email,
+          password: input.password,
+        });
+        break;
+    }
+
+    return true;
+  } catch (err) {
+    logger.error('Failed to create user', { err });
+
     return false;
   }
 }
@@ -186,6 +249,19 @@ export async function updateAnnouncement(id: number, input: { title: string; bod
     return true;
   } catch (err) {
     logger.error('Failed to update announcement', { err, id });
+    return false;
+  }
+}
+
+export async function deleteAnnouncement(id: number): Promise<boolean> {
+  try {
+    await pool.execute(
+      'DELETE FROM announcement WHERE id = ?',
+      [id],
+    );
+    return true;
+  } catch (err) {
+    logger.error('Failed to delete announcement', { err, id });
     return false;
   }
 }

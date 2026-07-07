@@ -102,3 +102,14 @@ export async function apiDelete(path) {
     }),
   );
 }
+
+export async function apiPut(url, body) {
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) throw new Error("Request failed");
+  return res.json();
+}
