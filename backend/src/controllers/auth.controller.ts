@@ -163,27 +163,32 @@ export async function login(
 
 /** POST /api/auth/logout  (D1 9.1: server-side session invalidation) */
 export async function logout(req: Request, res: Response): Promise<void> {
-  await recordAudit({
-    userId: req.session.user?.id ?? null,
-    role: req.session.user?.role ?? null,
-    action: 'logout',
-    target:  `User ID: ${req.session.user?.id}`,
-    ip: req.ip,
-    result: 'success',
-  });
+  const sessionUser = req.session.user;
 
   await new Promise<void>((resolve, reject) => {
     req.session.destroy((err) => (err ? reject(err) : resolve()));
   });
+
   res.clearCookie('hn.sid');
   clearCsrfToken(res);
+
+  await recordAudit({
+    userId: sessionUser?.id ?? null,
+    role: sessionUser?.role ?? null,
+    action: 'auth.logout',
+    target: sessionUser ? `user:${sessionUser.id}` : 'auth/logout',
+    ip: req.ip,
+    result: 'success',
+  });
+
   res.status(200).json({ message: 'Logged out.' });
 }
 
-/** GET /api/auth/me  — current session user (from the server-side session only). */
+/** GET /api/auth/me — current session user (from the server-side session only). */
 export async function me(req: Request, res: Response): Promise<void> {
   if (!req.session.user) {
     throw new AppError(401, 'Authentication required.');
   }
+
   res.status(200).json({ user: req.session.user });
 }
