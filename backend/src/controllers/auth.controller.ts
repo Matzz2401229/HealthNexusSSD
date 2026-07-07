@@ -5,6 +5,7 @@ import { AppError } from '../utils/AppError';
 import { validatePasswordPolicy } from '../utils/password';
 import { attachCsrfToken, clearCsrfToken } from '../middleware/csrf';
 import * as authService from '../services/auth.service';
+import { recordAudit } from '../services/audit.service';
 
 /**
  * Auth controllers — OWNER: IS (Adil)
@@ -105,44 +106,78 @@ export async function registerPharmacist(req: Request, res: Response): Promise<v
 export async function login(req: Request, res: Response): Promise<void> {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
-    throw new AppError(400, 'Invalid request.'); // generic on purpose
+    throw new AppError(400, 'Invalid request.');
   }
 
-  const sessionUser = await authService.login(parsed.data.email, parsed.data.password);
+  let sessionUser: Awaited<ReturnType<typeof authService.login>>;
 
-  // FSR8: regenerate session id on login to prevent session fixation.
+  try {
+    sessionUser = await authService.login(parsed.data.email, parsed.data.password);
+  } catch (err) {
+    await recordAudit({
+      userId: null,
+      role: null,
+      action: 'auth.login',
+      target: 'auth/login',
+      ip: req.ip,
+      result: 'failure',
+    });
+
+    throw err;
+  }
+
   await new Promise<void>((resolve, reject) => {
     req.session.regenerate((err) => (err ? reject(err) : resolve()));
   });
 
-  // Store ONLY minimal identity server-side (FSR2). No PHI, no password.
   req.session.user = sessionUser;
 
   await new Promise<void>((resolve, reject) => {
     req.session.save((err) => (err ? reject(err) : resolve()));
   });
 
-  // FSR12: issue the anti-CSRF token server-side, tied to the same moment a
-  // fresh session begins.
   attachCsrfToken(res);
+
+  await recordAudit({
+    userId: sessionUser.id,
+    role: sessionUser.role,
+    action: 'auth.login',
+    target: `user:${sessionUser.id}`,
+    ip: req.ip,
+    result: 'success',
+  });
 
   res.status(200).json({ message: 'Login successful.', user: sessionUser });
 }
 
 /** POST /api/auth/logout  (D1 9.1: server-side session invalidation) */
 export async function logout(req: Request, res: Response): Promise<void> {
+  const sessionUser = req.session.user;
+
   await new Promise<void>((resolve, reject) => {
     req.session.destroy((err) => (err ? reject(err) : resolve()));
   });
+
   res.clearCookie('hn.sid');
   clearCsrfToken(res);
+
+  await recordAudit({
+    userId: sessionUser?.id ?? null,
+    role: sessionUser?.role ?? null,
+    action: 'auth.logout',
+    target: sessionUser ? `user:${sessionUser.id}` : 'auth/logout',
+    ip: req.ip,
+    result: 'success',
+  });
+
   res.status(200).json({ message: 'Logged out.' });
 }
 
-/** GET /api/auth/me  — current session user (from the server-side session only). */
+/** GET /api/auth/me — current session user (from the server-side session only). */
 export async function me(req: Request, res: Response): Promise<void> {
   if (!req.session.user) {
     throw new AppError(401, 'Authentication required.');
   }
+
   res.status(200).json({ user: req.session.user });
 }
