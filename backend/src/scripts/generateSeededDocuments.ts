@@ -120,8 +120,6 @@ async function main() {
         sha256,
       },
     );
-
-    console.log(`Generated ${document.original_name}`);
   }
 }
 

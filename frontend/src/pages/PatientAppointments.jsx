@@ -67,7 +67,7 @@ export default function PatientAppointments() {
             const data = await res.json();
             setDoctors(data.doctors || []);
         } catch (err) {
-            console.warn('Failed to fetch available doctors.');
+            //console.warn('Failed to fetch available doctors.');
         }
     };
 

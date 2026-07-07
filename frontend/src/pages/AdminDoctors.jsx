@@ -30,9 +30,7 @@ export default function AdminDoctors() {
           await apiPost(`/admin/pending-doctors/${id}/reject`);
           setMessage('Doctor rejected.');
         //   loadData();
-        console.log("reloading data...");
     await loadData();
-    console.log("done");
         } catch (err) {
           setMessage(err.message || 'Unable to reject doctor.');
         }
