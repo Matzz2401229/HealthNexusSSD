@@ -49,7 +49,6 @@ export default function Dashboard() {
       const data = await apiGet("/admin/announcements");
       setAnnouncements(data || []);
     } catch (err) {
-      console.log("Failed to load announcements");
     }
   };
 

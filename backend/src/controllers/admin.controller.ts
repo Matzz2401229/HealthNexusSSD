@@ -29,8 +29,6 @@ export async function approveDoctor(req: Request, res: Response, next: NextFunct
     res.status(401).json({ error: 'Unauthenticated.' });
     return;
     }
-    console.log("Doctor ID:", id);
-    console.log("Admin ID:", adminId);
 
     const ok = await adminService.approveDoctor(id, adminId);
 
