@@ -4,6 +4,8 @@ import ProtectedRoute, { RequireAdmin } from './components/ProtectedRoute';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Prescriptions from './pages/Prescriptions';
 import IssuePrescription from './pages/IssuePrescription';
 import DoctorPrescriptions from './pages/DoctorPrescriptions';
@@ -103,7 +105,8 @@ export default function App() {
             path="/admin/announcements"
             element={<RequireAdmin><AdminAnnouncements /></RequireAdmin>}
         />
-        <Route path="/forgot-password" element={<Placeholder title="Forgot password" />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route
           path="/prescriptions"
           element={

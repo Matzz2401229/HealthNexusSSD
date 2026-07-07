@@ -31,6 +31,7 @@ const registerPatientSchema = z.object({
   dateOfBirth: dobField,
   email: emailField,
   password: passwordField,
+  emailVerificationCode: z.string().regex(/^\d{6}$/, 'Verification code must be 6 digits.'),
 });
 
 const registerDoctorSchema = registerPatientSchema.omit({ dateOfBirth: true }).extend({
@@ -46,8 +47,51 @@ const loginSchema = z.object({
   password: z.string().min(1).max(128),
 });
 
+const forgotPasswordSchema = z.object({
+  email: emailField,
+});
+
+const registrationCodeSchema = z.object({
+  email: emailField,
+});
+
+const verifyResetCodeSchema = z.object({
+  email: emailField,
+  code: z.string().regex(/^\d{6}$/, 'Verification code must be 6 digits.'),
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(32).max(256),
+  password: passwordField,
+  confirmPassword: passwordField,
+});
+
 function firstZodMessage(err: z.ZodError): string {
   return err.issues[0]?.message ?? 'Invalid request.';
+}
+
+/** POST /api/auth/registration-code — send code before self-registration. */
+export async function requestRegistrationCode(req: Request, res: Response): Promise<void> {
+  const parsed = registrationCodeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new AppError(400, firstZodMessage(parsed.error));
+  }
+
+  const result = await authService.requestRegistrationVerificationCode(parsed.data.email, req.ip);
+
+  await recordAudit({
+    userId: null,
+    role: null,
+    action: 'auth.registration_code.request',
+    target: parsed.data.email,
+    ip: req.ip,
+    result: 'success',
+  });
+
+  res.status(200).json({
+    message: result.message,
+    developmentCode: result.developmentCode,
+  });
 }
 
 /** POST /api/auth/register  (patient self-registration, FR1) */
@@ -182,6 +226,89 @@ export async function logout(req: Request, res: Response): Promise<void> {
   });
 
   res.status(200).json({ message: 'Logged out.' });
+}
+
+/** POST /api/auth/forgot-password — generic, non-enumerating reset request. */
+export async function forgotPassword(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const parsed = forgotPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new AppError(400, firstZodMessage(parsed.error));
+  }
+
+  const result = await authService.requestPasswordResetCode(parsed.data.email, req.ip);
+
+  await recordAudit({
+    userId: null,
+    role: null,
+    action: 'auth.password_reset.request',
+    target: parsed.data.email,
+    ip: req.ip,
+    result: 'success',
+  });
+
+  res.status(200).json({
+    message: result.message,
+    developmentCode: result.developmentCode,
+  });
+}
+
+/** POST /api/auth/verify-reset-code — verify emailed code before reset form. */
+export async function verifyResetCode(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const parsed = verifyResetCodeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new AppError(400, firstZodMessage(parsed.error));
+  }
+
+  const result = await authService.verifyPasswordResetCode(parsed.data.email, parsed.data.code, req.ip);
+
+  await recordAudit({
+    userId: null,
+    role: null,
+    action: 'auth.password_reset.code_verified',
+    target: parsed.data.email,
+    ip: req.ip,
+    result: 'success',
+  });
+
+  res.status(200).json({
+    resetToken: result.resetToken,
+  });
+}
+
+/** POST /api/auth/reset-password — validates token then updates password. */
+export async function resetPassword(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const parsed = resetPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new AppError(400, firstZodMessage(parsed.error));
+  }
+
+  if (parsed.data.password !== parsed.data.confirmPassword) {
+    throw new AppError(400, 'Passwords do not match.');
+  }
+
+  const result = await authService.resetPasswordWithToken(parsed.data.token, parsed.data.password);
+
+  await recordAudit({
+    userId: result.userId,
+    role: null,
+    action: 'auth.password_reset.complete',
+    target: `user:${result.userId}`,
+    ip: req.ip,
+    result: 'success',
+  });
+
+  res.status(200).json({
+    message: 'Your password has been reset. Please sign in with your new password.',
+  });
 }
 
 /** GET /api/auth/me — current session user (from the server-side session only). */

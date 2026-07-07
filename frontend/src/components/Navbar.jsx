@@ -46,9 +46,8 @@ function userInitial(user) {
   return (user?.fullName || user?.email || user?.role || 'U').trim().charAt(0).toUpperCase();
 }
 
-function isActiveRoute(pathname, target) {
-  if (target === '/dashboard') return pathname === target;
-  return pathname === target || pathname.startsWith(`${target}/`);
+function shouldMatchExactly(target) {
+  return target === '/dashboard' || target === '/admin';
 }
 
 export default function Navbar() {
@@ -85,7 +84,8 @@ export default function Navbar() {
               <NavLink
                 key={link.to}
                 to={link.to}
-                className={`hn-nav-item ${isActiveRoute(pathname, link.to) ? 'active' : ''}`}
+                end={shouldMatchExactly(link.to)}
+                className={({ isActive }) => `hn-nav-item ${isActive ? 'active' : ''}`}
               >
                 {link.label}
               </NavLink>
@@ -135,7 +135,8 @@ export default function Navbar() {
             <NavLink
               key={link.to}
               to={link.to}
-              className={`hn-mobile-nav-item ${isActiveRoute(pathname, link.to) ? 'active' : ''}`}
+              end={shouldMatchExactly(link.to)}
+              className={({ isActive }) => `hn-mobile-nav-item ${isActive ? 'active' : ''}`}
             >
               {link.label}
             </NavLink>

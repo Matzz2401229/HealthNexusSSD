@@ -27,8 +27,47 @@
 -- ---------------------------------------------------------------------
 USE healthnexus;
 
+CREATE TABLE IF NOT EXISTS password_reset_token (
+  id          BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  user_id     BIGINT UNSIGNED NOT NULL,
+  token_hash  CHAR(64) NOT NULL UNIQUE,
+  expires_at  DATETIME NOT NULL,
+  used_at     DATETIME NULL,
+  requested_ip VARCHAR(45) NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_password_reset_user (user_id),
+  INDEX idx_password_reset_expires (expires_at),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS email_verification_code (
+  id          BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  email       VARCHAR(255) NOT NULL,
+  purpose     ENUM('registration','password_reset') NOT NULL,
+  code_hash   CHAR(64) NOT NULL,
+  expires_at  DATETIME NOT NULL,
+  attempts    INT NOT NULL DEFAULT 0,
+  used_at     DATETIME NULL,
+  requested_ip VARCHAR(45) NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_email_verification_lookup (email, purpose, used_at),
+  INDEX idx_email_verification_expires (expires_at)
+);
+
 -- --- Clean up any previous run of this seed (idempotent) --------------
 SET FOREIGN_KEY_CHECKS = 0;
+DELETE FROM password_reset_token WHERE user_id IN (1, 2, 3, 4, 5, 6, 7, 8, 9);
+DELETE FROM email_verification_code WHERE email IN (
+  'patient@test.com',
+  'doctor@test.com',
+  'pharmacist@test.com',
+  'admin@test.com',
+  'pending.doctor@test.com',
+  'patient2@test.com',
+  'doctor2@test.com',
+  'patient3@test.com',
+  'doctor3@test.com'
+);
 DELETE FROM document_request     WHERE document_id IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12) OR requester_id IN (2, 3, 4, 7, 9) OR id IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
 DELETE FROM medical_document     WHERE id IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12) OR patient_id IN (1, 6, 8);
 DELETE FROM prescription        WHERE patient_id IN (1, 6, 8) OR doctor_id IN (2, 5, 7, 9);

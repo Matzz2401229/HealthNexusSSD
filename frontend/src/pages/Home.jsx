@@ -1,41 +1,86 @@
+import { Link } from 'react-router-dom';
 import Logo from '../components/Logo';
 
-/**
- * Landing page. Demonstrates the theme tokens (badge, headings, buttons,
- * cards). Use this as a reference for spacing/typography on other pages.
- */
+const patientSteps = [
+  ['Book care', 'Schedule appointments with approved doctors.'],
+  ['Share records', 'Approve document access only when you choose.'],
+  ['Track treatment', 'View prescriptions and visit notes in one place.'],
+];
+
 export default function Home() {
   return (
-    <div className="hn-page">
-      <span className="hn-badge">Secure telemedicine &amp; EHR</span>
-      <h1 style={{ fontSize: '2.4rem', fontWeight: 700, margin: '1rem 0 0.5rem' }}>
-        Healthcare, connected and protected.
-      </h1>
-      <p className="hn-text-muted" style={{ fontSize: '1.1rem', maxWidth: '38rem' }}>
-        HealthNexus links patients, doctors, and pharmacists on one secure
-        platform — appointments, records, and prescriptions, with privacy built in.
-      </p>
-
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: '1rem',
-          marginTop: '3rem',
-        }}
-      >
-        {[
-          ['For patients', 'Book appointments, view diagnoses, and access prescriptions securely.'],
-          ['For doctors', 'Manage schedules and authorised patient records in one place.'],
-          ['For pharmacists', 'Review and fulfil prescriptions with a clear audit trail.'],
-        ].map(([title, body]) => (
-          <div className="hn-card" key={title}>
-            <div style={{ color: 'var(--hn-primary)', marginBottom: '0.5rem' }}><Logo size={24} /></div>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '0 0 0.4rem' }}>{title}</h3>
-            <p className="hn-text-muted" style={{ margin: 0, fontSize: '0.92rem' }}>{body}</p>
+    <main className="hn-home">
+      <section className="hn-home-hero">
+        <div className="hn-home-copy">
+          <span className="hn-badge">Private digital clinic</span>
+          <h1>Care feels simpler when your health records are organised.</h1>
+          <p>
+            HealthNexus helps patients book appointments, manage medical documents,
+            and follow prescriptions with secure access controls built in.
+          </p>
+          <div className="hn-home-actions">
+            <Link to="/register" className="hn-btn hn-btn-primary">Create patient account</Link>
+            <Link to="/login" className="hn-btn hn-btn-outline">Sign in</Link>
           </div>
+        </div>
+
+        <aside className="hn-home-clinic-card" aria-label="Clinic preview">
+          <div className="hn-home-clinic-top">
+            <Logo size={34} />
+            <div>
+              <strong>HealthNexus Clinic</strong>
+              <span>Today&apos;s patient flow</span>
+            </div>
+          </div>
+          <div className="hn-home-vitals">
+            <div><span>Records</span><strong>Encrypted</strong></div>
+            <div><span>Access</span><strong>Patient-led</strong></div>
+            <div><span>Audits</span><strong>Logged</strong></div>
+          </div>
+          <div className="hn-home-appointment">
+            <span>Next visit</span>
+            <strong>General consultation</strong>
+            <p>Bring documents, prescriptions, and appointment history together before care begins.</p>
+          </div>
+        </aside>
+      </section>
+
+      <section className="hn-home-strip" aria-label="Patient benefits">
+        {patientSteps.map(([title, body]) => (
+          <article key={title}>
+            <span />
+            <strong>{title}</strong>
+            <p>{body}</p>
+          </article>
         ))}
-      </div>
-    </div>
+      </section>
+
+      <section className="hn-home-grid">
+        <article className="hn-card hn-home-feature-primary">
+          <span className="hn-badge">For patients</span>
+          <h2>You stay in control of your documents.</h2>
+          <p>
+            Doctors and admins request access when they need a file. You review the reason,
+            approve or deny it, and can revoke approved sharing later.
+          </p>
+        </article>
+
+        <article className="hn-card">
+          <h3>For doctors</h3>
+          <p className="hn-text-muted">
+            Request patient-approved records, manage appointments, and issue prescriptions
+            only within authorised care relationships.
+          </p>
+        </article>
+
+        <article className="hn-card">
+          <h3>For pharmacists</h3>
+          <p className="hn-text-muted">
+            Work from a focused fulfilment queue with prescription details and audit-backed
+            dispensing decisions.
+          </p>
+        </article>
+      </section>
+    </main>
   );
 }

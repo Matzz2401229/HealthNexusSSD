@@ -11,7 +11,12 @@ import { apiPost } from '../lib/api';
  * Password policy is hinted here for UX but enforced server-side (FSR7).
  */
 function endpointAndPayload(form) {
-  const base = { name: form.name, email: form.email, password: form.password };
+  const base = {
+    name: form.name,
+    email: form.email,
+    password: form.password,
+    emailVerificationCode: form.emailVerificationCode,
+  };
   if (form.role === 'doctor') {
     return ['/auth/register/doctor', { ...base, specialty: form.specialty || undefined }];
   }
@@ -25,19 +30,48 @@ export default function Register() {
   const [form, setForm] = useState({
     name: '', email: '', role: 'patient',
     dateOfBirth: '', specialty: '', pharmacy: '',
-    password: '', confirm: '',
+    password: '', confirm: '', emailVerificationCode: '',
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [codeMessage, setCodeMessage] = useState('');
+  const [developmentCode, setDevelopmentCode] = useState('');
   const [busy, setBusy] = useState(false);
+  const [codeBusy, setCodeBusy] = useState(false);
 
   const update = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+
+  const requestCode = async () => {
+    setError('');
+    setCodeMessage('');
+    setDevelopmentCode('');
+
+    if (!form.email) {
+      setError('Enter your email before requesting a verification code.');
+      return;
+    }
+
+    setCodeBusy(true);
+    try {
+      const data = await apiPost('/auth/registration-code', { email: form.email });
+      setCodeMessage(data.message || 'Verification code sent.');
+      setDevelopmentCode(data.developmentCode || '');
+    } catch (err) {
+      setError(err.message || 'Unable to send verification code.');
+    } finally {
+      setCodeBusy(false);
+    }
+  };
 
   const onSubmit = async (e) => {
     e.preventDefault();
     setError('');
     if (form.password !== form.confirm) {
       setError('Passwords do not match.');
+      return;
+    }
+    if (!/^\d{6}$/.test(form.emailVerificationCode)) {
+      setError('Enter the 6-digit email verification code.');
       return;
     }
     setBusy(true);
@@ -53,21 +87,23 @@ export default function Register() {
   };
 
   return (
-    <div className="hn-auth">
+    <div className="hn-auth hn-auth-clinic">
       <aside className="hn-auth__brand">
-        <h1>Join HealthNexus</h1>
-        <p>Create a secure account to manage your care — or register as a healthcare professional.</p>
+        <span className="hn-auth-kicker">Start your care record</span>
+        <h1>Join a clinic workspace built around patient control.</h1>
+        <p>Create a secure account to manage care, records, and prescriptions.</p>
         <ul className="hn-auth__points">
-          <li>🛡️ Your data is protected with strong encryption</li>
-          <li>✅ Doctor &amp; pharmacist accounts are verified by an admin before activation</li>
-          <li>⚡ One account across all your care providers</li>
+          <li><span>01</span> Patient accounts can start using the portal immediately</li>
+          <li><span>02</span> Doctors and pharmacists require admin verification</li>
+          <li><span>03</span> Strong passwords protect clinical access</li>
         </ul>
       </aside>
 
       <section className="hn-auth__form">
         <div className="hn-auth__form-inner">
+          <span className="hn-badge">Create secure access</span>
           <h2 className="hn-auth__title">Create account</h2>
-          <p className="hn-auth__subtitle">It only takes a minute.</p>
+          <p className="hn-auth__subtitle">Start as a patient, or register for staff review.</p>
 
           {success ? (
             <div className="hn-card" style={{ borderColor: 'var(--hn-success)' }}>
@@ -95,6 +131,35 @@ export default function Register() {
                   <label className="hn-label" htmlFor="email">Email</label>
                   <input className="hn-input" id="email" name="email" type="email"
                     placeholder="you@example.com" value={form.email} onChange={update} required />
+                </div>
+
+                <div className="hn-field">
+                  <label className="hn-label" htmlFor="emailVerificationCode">Email verification</label>
+                  <div className="hn-code-row">
+                    <input
+                      className="hn-input"
+                      id="emailVerificationCode"
+                      name="emailVerificationCode"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]{6}"
+                      maxLength="6"
+                      placeholder="6-digit code"
+                      value={form.emailVerificationCode}
+                      onChange={update}
+                      required
+                    />
+                    <button className="hn-btn hn-btn-outline" type="button" onClick={requestCode} disabled={codeBusy}>
+                      {codeBusy ? 'Sending…' : 'Send code'}
+                    </button>
+                  </div>
+                  <p className="hn-hint">
+                    We send a code to confirm this email before creating the account.
+                  </p>
+                  {codeMessage ? <p className="hn-hint" style={{ color: 'var(--hn-success)' }}>{codeMessage}</p> : null}
+                  {developmentCode ? (
+                    <p className="hn-hint">Development code: <strong>{developmentCode}</strong></p>
+                  ) : null}
                 </div>
 
                 <div className="hn-field">

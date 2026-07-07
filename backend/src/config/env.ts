@@ -50,6 +50,16 @@ export const config = {
     dir: process.env.UPLOAD_DIR ?? '/tmp/healthnexus/uploads',
   },
 
+  email: {
+    from: process.env.SMTP_FROM ?? '',
+    host: process.env.SMTP_HOST ?? '',
+    port: num('SMTP_PORT', 587),
+    user: process.env.SMTP_USER ?? '',
+    password: process.env.SMTP_PASSWORD ?? '',
+    secure: process.env.SMTP_SECURE === 'true',
+    appBaseUrl: process.env.APP_BASE_URL ?? 'http://localhost',
+  },
+
   isProd(): boolean {
     return this.nodeEnv === 'production';
   },

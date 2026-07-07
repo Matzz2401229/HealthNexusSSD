@@ -198,6 +198,33 @@ CREATE TABLE IF NOT EXISTS auditlog (
   -- NB: never store passwords, tokens, or clinical content here.
 );
 
+CREATE TABLE IF NOT EXISTS password_reset_token (
+  id          BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  user_id     BIGINT UNSIGNED NOT NULL,
+  token_hash  CHAR(64) NOT NULL UNIQUE,                -- SHA-256 of the random reset token; never store plaintext
+  expires_at  DATETIME NOT NULL,
+  used_at     DATETIME NULL,
+  requested_ip VARCHAR(45) NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_password_reset_user (user_id),
+  INDEX idx_password_reset_expires (expires_at),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS email_verification_code (
+  id          BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  email       VARCHAR(255) NOT NULL,
+  purpose     ENUM('registration','password_reset') NOT NULL,
+  code_hash   CHAR(64) NOT NULL,
+  expires_at  DATETIME NOT NULL,
+  attempts    INT NOT NULL DEFAULT 0,
+  used_at     DATETIME NULL,
+  requested_ip VARCHAR(45) NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_email_verification_lookup (email, purpose, used_at),
+  INDEX idx_email_verification_expires (expires_at)
+);
+
 -- --- Session store (express-mysql-session) --------------------------
 CREATE TABLE IF NOT EXISTS sessions (
   session_id VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
