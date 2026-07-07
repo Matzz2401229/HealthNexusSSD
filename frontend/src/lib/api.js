@@ -19,8 +19,9 @@ export function getCsrfToken() {
 }
 
 export async function ensureCsrfToken() {
-  const existing = getCsrfToken();
-  if (existing) return existing;
+  // Always refresh before unsafe requests. A browser can keep an old readable
+  // csrf_token after Docker/backend restarts while the server-side session hash
+  // is gone; reissuing keeps the cookie/header/session triplet in sync.
   const data = await apiGet('/auth/csrf');
   return data.csrfToken || getCsrfToken();
 }

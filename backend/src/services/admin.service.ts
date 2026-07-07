@@ -1,4 +1,4 @@
-import { RowDataPacket } from 'mysql2';
+import { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../db/pool';
 import { logger } from '../utils/logger';
 import {
@@ -7,6 +7,7 @@ import {
   registerPharmacist,
   registerAdmin,
 } from './auth.service';
+import { hardDeleteUserById } from './userDeletion.service';
 
 export interface DoctorRegistrationRow extends RowDataPacket {
   id: number;
@@ -187,18 +188,7 @@ export async function updateUserStatus(id: number, isActive: boolean): Promise<b
 
 export async function deleteUser(id: number): Promise<boolean> {
   try {
-      await pool.execute(
-        `UPDATE users
-            SET is_active = FALSE,
-                deleted_at = NOW(),
-                approval_status = CASE
-                  WHEN approval_status = 'pending' THEN 'rejected'
-                  ELSE approval_status
-                END
-          WHERE id = ? AND deleted_at IS NULL`,
-      [id],
-    );
-    return true;
+    return await hardDeleteUserById(id);
   } catch (err) {
     logger.error('Failed to delete user', { err, id });
     return false;

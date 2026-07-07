@@ -33,6 +33,7 @@ function mockReq(method = 'POST') {
     method,
     cookies: {},
     session: {},
+    secure: false,
     get: () => undefined,
   } as unknown as Request;
 }
@@ -49,6 +50,21 @@ describe('attachCsrfToken', () => {
     const { value, options } = res.cookies.csrf_token as { value: string; options: { httpOnly: boolean } };
     expect(value).toBe(token);
     expect(options.httpOnly).toBe(false);
+    expect(options.secure).toBe(false);
+  });
+
+  it('marks the csrf cookie secure only for HTTPS/proxied HTTPS requests', () => {
+    const req = {
+      ...mockReq(),
+      secure: false,
+      get: (name: string) => (name.toLowerCase() === 'x-forwarded-proto' ? 'https' : undefined),
+    } as unknown as Request;
+    const res = mockRes();
+
+    attachCsrfToken(req, res);
+
+    const { options } = res.cookies.csrf_token as { options: { secure: boolean } };
+    expect(options.secure).toBe(true);
   });
 
   it('issues a different token on each call', () => {

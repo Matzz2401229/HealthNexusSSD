@@ -39,9 +39,8 @@ describe('security configuration', () => {
     expect(initSql).not.toContain("TO 'healthnexus_app'@'%'");
     expect(migration).not.toContain("TO 'healthnexus_app'@'%'");
     expect(grants).toContain('${MYSQL_USER}');
-    expect(grants).toContain('GRANT SELECT, INSERT ON `');
-    expect(grants).toContain('`.auditlog');
-    expect(grants).not.toMatch(/GRANT\s+SELECT,\s+INSERT,\s+UPDATE\s+ON\s+`[^`]+`\.auditlog/i);
+    expect(grants).toContain('GRANT SELECT, INSERT ON \\`${MYSQL_DATABASE}\\`.auditlog');
+    expect(grants).not.toMatch(/GRANT\s+SELECT,\s+INSERT,\s+UPDATE\s+ON\s+\\`\$\{MYSQL_DATABASE\}\\`\.auditlog/i);
   });
 
   it('keeps the shared frontend PUT helper CSRF-protected', () => {

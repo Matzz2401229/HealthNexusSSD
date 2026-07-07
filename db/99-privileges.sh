@@ -1,47 +1,25 @@
 #!/bin/sh
 set -eu
 
-mysql --protocol=socket -uroot -p"${MYSQL_ROOT_PASSWORD}" <<SQL
-SET @app_user := REPLACE('${MYSQL_USER}', '''', '''''');
-SET @schema_name := REPLACE('${MYSQL_DATABASE}', '`', '``');
+MYSQL_HOST= MYSQL_TCP_PORT= MYSQL_PORT= mysql -hlocalhost -uroot -p"${MYSQL_ROOT_PASSWORD}" <<SQL
+REVOKE ALL PRIVILEGES, GRANT OPTION FROM '${MYSQL_USER}'@'%';
 
-SET @sql := CONCAT('REVOKE ALL PRIVILEGES, GRANT OPTION FROM ''', @app_user, '''@''%''');
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
-SET @sql := CONCAT('GRANT SELECT, INSERT, UPDATE ON `', @schema_name, '`.users TO ''', @app_user, '''@''%''');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @sql := CONCAT('GRANT SELECT, INSERT, UPDATE ON `', @schema_name, '`.patient TO ''', @app_user, '''@''%''');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @sql := CONCAT('GRANT SELECT, INSERT, UPDATE ON `', @schema_name, '`.doctor TO ''', @app_user, '''@''%''');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @sql := CONCAT('GRANT SELECT, INSERT, UPDATE ON `', @schema_name, '`.pharmacist TO ''', @app_user, '''@''%''');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @sql := CONCAT('GRANT SELECT, INSERT, UPDATE ON `', @schema_name, '`.admin TO ''', @app_user, '''@''%''');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @sql := CONCAT('GRANT SELECT, INSERT, UPDATE ON `', @schema_name, '`.doctor_patient_auth TO ''', @app_user, '''@''%''');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @sql := CONCAT('GRANT SELECT, INSERT, UPDATE ON `', @schema_name, '`.appointment TO ''', @app_user, '''@''%''');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @sql := CONCAT('GRANT SELECT, INSERT, UPDATE ON `', @schema_name, '`.diagnosis TO ''', @app_user, '''@''%''');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @sql := CONCAT('GRANT SELECT, INSERT, UPDATE ON `', @schema_name, '`.prescription TO ''', @app_user, '''@''%''');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @sql := CONCAT('GRANT SELECT, INSERT, UPDATE ON `', @schema_name, '`.medical_document TO ''', @app_user, '''@''%''');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @sql := CONCAT('GRANT SELECT, INSERT, UPDATE ON `', @schema_name, '`.document_request TO ''', @app_user, '''@''%''');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @sql := CONCAT('GRANT SELECT, INSERT, UPDATE ON `', @schema_name, '`.announcement TO ''', @app_user, '''@''%''');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @sql := CONCAT('GRANT SELECT, INSERT ON `', @schema_name, '`.auditlog TO ''', @app_user, '''@''%''');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @sql := CONCAT('GRANT SELECT, INSERT, UPDATE ON `', @schema_name, '`.password_reset_token TO ''', @app_user, '''@''%''');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @sql := CONCAT('GRANT SELECT, INSERT, UPDATE ON `', @schema_name, '`.email_verification_code TO ''', @app_user, '''@''%''');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @sql := CONCAT('GRANT SELECT, INSERT, UPDATE, DELETE ON `', @schema_name, '`.sessions TO ''', @app_user, '''@''%''');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`${MYSQL_DATABASE}\`.users TO '${MYSQL_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.patient TO '${MYSQL_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.doctor TO '${MYSQL_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.pharmacist TO '${MYSQL_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.admin TO '${MYSQL_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`${MYSQL_DATABASE}\`.doctor_patient_auth TO '${MYSQL_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`${MYSQL_DATABASE}\`.appointment TO '${MYSQL_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`${MYSQL_DATABASE}\`.diagnosis TO '${MYSQL_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`${MYSQL_DATABASE}\`.prescription TO '${MYSQL_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`${MYSQL_DATABASE}\`.medical_document TO '${MYSQL_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`${MYSQL_DATABASE}\`.document_request TO '${MYSQL_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.announcement TO '${MYSQL_USER}'@'%';
+GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.auditlog TO '${MYSQL_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.password_reset_token TO '${MYSQL_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`${MYSQL_DATABASE}\`.email_verification_code TO '${MYSQL_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`${MYSQL_DATABASE}\`.sessions TO '${MYSQL_USER}'@'%';
 
 FLUSH PRIVILEGES;
 SQL

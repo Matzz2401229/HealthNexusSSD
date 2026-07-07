@@ -22,6 +22,10 @@ export function issueCsrfToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
+function requestIsSecure(req: Request): boolean {
+  return req.secure || req.get('x-forwarded-proto') === 'https';
+}
+
 function hashCsrfToken(token: string): string {
   return crypto
     .createHmac('sha256', config.session.secret)
@@ -39,7 +43,7 @@ export function attachCsrfToken(req: Request, res: Response): string {
   req.session.csrfTokenHash = hashCsrfToken(token);
   res.cookie(CSRF_COOKIE, token, {
     httpOnly: false,
-    secure: config.isProd(),
+    secure: requestIsSecure(req),
     sameSite: 'strict',
   });
   return token;

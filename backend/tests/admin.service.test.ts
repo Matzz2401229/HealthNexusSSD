@@ -1,5 +1,5 @@
 jest.mock('../src/db/pool', () => ({
-  pool: { execute: jest.fn() },
+  pool: { execute: jest.fn(), getConnection: jest.fn() },
 }));
 
 jest.mock('../src/utils/logger', () => ({
@@ -21,21 +21,42 @@ import { pool } from '../src/db/pool';
 import { deleteAnnouncement, deleteUser, listAnnouncements, updateAnnouncement } from '../src/services/admin.service';
 
 const mockExecute = pool.execute as unknown as jest.Mock;
+const mockGetConnection = pool.getConnection as unknown as jest.Mock;
+const mockConn = {
+  beginTransaction: jest.fn(),
+  execute: jest.fn(),
+  commit: jest.fn(),
+  rollback: jest.fn(),
+  release: jest.fn(),
+};
 
-describe('admin soft deletes', () => {
+describe('admin user removal and announcement soft deletes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockExecute.mockResolvedValue([{}]);
+    mockGetConnection.mockResolvedValue(mockConn);
+    mockConn.beginTransaction.mockResolvedValue(undefined);
+    mockConn.execute.mockResolvedValue([{}]);
+    mockConn.commit.mockResolvedValue(undefined);
+    mockConn.rollback.mockResolvedValue(undefined);
   });
 
-  it('deactivates users instead of deleting user rows', async () => {
+  it('removes user rows after cleaning dependent data so emails can be reused', async () => {
+    mockConn.execute.mockResolvedValueOnce([[{ email: 'removed@example.test' }]]);
+
     await expect(deleteUser(7)).resolves.toBe(true);
 
-    expect(mockExecute.mock.calls[0][0]).toMatch(/UPDATE users/i);
-    expect(mockExecute.mock.calls[0][0]).toMatch(/SET is_active = FALSE/i);
-    expect(mockExecute.mock.calls[0][0]).toMatch(/deleted_at = NOW\(\)/i);
-    expect(mockExecute.mock.calls[0][0]).toMatch(/deleted_at IS NULL/i);
-    expect(mockExecute.mock.calls[0][0]).not.toMatch(/DELETE FROM users/i);
+    const queries = mockConn.execute.mock.calls.map((call) => call[0]).join('\n');
+    expect(mockConn.beginTransaction).toHaveBeenCalled();
+    expect(queries).toMatch(/SELECT id, email FROM users/i);
+    expect(queries).toMatch(/DELETE FROM sessions/i);
+    expect(queries).toMatch(/DELETE FROM email_verification_code/i);
+    expect(queries).toMatch(/DELETE FROM document_request/i);
+    expect(queries).toMatch(/DELETE FROM medical_document/i);
+    expect(queries).toMatch(/DELETE FROM appointment/i);
+    expect(queries).toMatch(/DELETE FROM users WHERE id = \?/i);
+    expect(mockConn.commit).toHaveBeenCalled();
+    expect(mockConn.release).toHaveBeenCalled();
   });
 
   it('soft-deletes announcements and excludes deleted rows from reads and updates', async () => {

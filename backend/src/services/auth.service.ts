@@ -12,6 +12,7 @@ import {
 } from '../utils/password';
 import { logger } from '../utils/logger';
 import { canExposeDevelopmentCode, sendEmail } from './email.service';
+import { purgeSoftDeletedUserByEmail } from './userDeletion.service';
 
 /**
  * Authentication service — OWNER: IS (Adil)
@@ -102,7 +103,7 @@ function generateVerificationCode(): string {
 
 async function findUserIdByEmail(email: string): Promise<number | null> {
   const [rows] = await pool.execute<RowDataPacket[]>(
-    'SELECT id FROM users WHERE email = ? LIMIT 1',
+    'SELECT id FROM users WHERE email = ? AND deleted_at IS NULL LIMIT 1',
     [normaliseEmail(email)],
   );
   return rows[0]?.id ? Number(rows[0].id) : null;
@@ -211,6 +212,7 @@ export async function registerPatient(
   if (options.requireEmailVerification !== false) {
     await requireRegistrationVerification(email, input.emailVerificationCode);
   }
+  await purgeSoftDeletedUserByEmail(email);
   const passwordHash = await hashPassword(input.password);
 
   const conn = await pool.getConnection();
@@ -252,6 +254,7 @@ export async function registerDoctor(
   if (options.requireEmailVerification !== false) {
     await requireRegistrationVerification(email, input.emailVerificationCode);
   }
+  await purgeSoftDeletedUserByEmail(email);
   const passwordHash = await hashPassword(input.password);
 
   const conn = await pool.getConnection();
@@ -294,6 +297,7 @@ export async function registerPharmacist(
   if (options.requireEmailVerification !== false) {
     await requireRegistrationVerification(email, input.emailVerificationCode);
   }
+  await purgeSoftDeletedUserByEmail(email);
   const passwordHash = await hashPassword(input.password);
 
   const conn = await pool.getConnection();
@@ -337,6 +341,7 @@ export async function registerAdmin(
   if (options.requireEmailVerification !== false) {
     await requireRegistrationVerification(email, input.emailVerificationCode);
   }
+  await purgeSoftDeletedUserByEmail(email);
   const passwordHash = await hashPassword(input.password);
 
   const conn = await pool.getConnection();

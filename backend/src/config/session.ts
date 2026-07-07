@@ -31,7 +31,7 @@ export const sessionMiddleware = session({
   rolling: true,
   cookie: {
     httpOnly: true,
-    secure: env.isProd(),
+    secure: env.isProd() ? 'auto' : false,
     sameSite: 'strict',
     // NFSR5: idle timeout, in ms. Env-configurable, same as the absolute
     // timeout enforced separately in middleware/auth.ts.

@@ -70,7 +70,7 @@ beforeEach(() => {
 describe('registration', () => {
   it('creates a patient as ACTIVE', async () => {
     const conn = mockConn();
-    conn.execute.mockResolvedValueOnce([{ insertId: 5 }]).mockResolvedValueOnce([{}]);
+    conn.execute.mockResolvedValueOnce([[]]).mockResolvedValueOnce([{ insertId: 5 }]).mockResolvedValueOnce([{}]);
     mockGetConnection.mockResolvedValue(conn);
 
     const res = await registerPatient(
@@ -79,7 +79,7 @@ describe('registration', () => {
     );
 
     expect(res.id).toBe(5);
-    const usersInsert = conn.execute.mock.calls[0][0] as string;
+    const usersInsert = conn.execute.mock.calls[1][0] as string;
     expect(usersInsert).toMatch(/INSERT INTO users/i);
     expect(usersInsert).toMatch(/'patient'/);
     expect(usersInsert).toMatch(/TRUE/);
@@ -90,7 +90,7 @@ describe('registration', () => {
 
   it('creates a doctor as INACTIVE (pending approval, FSR5)', async () => {
     const conn = mockConn();
-    conn.execute.mockResolvedValueOnce([{ insertId: 6 }]).mockResolvedValueOnce([{}]);
+    conn.execute.mockResolvedValueOnce([[]]).mockResolvedValueOnce([{ insertId: 6 }]).mockResolvedValueOnce([{}]);
     mockGetConnection.mockResolvedValue(conn);
 
     await registerDoctor(
@@ -98,7 +98,7 @@ describe('registration', () => {
       { requireEmailVerification: false },
     );
 
-    const usersInsert = conn.execute.mock.calls[0][0] as string;
+    const usersInsert = conn.execute.mock.calls[1][0] as string;
     expect(usersInsert).toMatch(/'doctor'/);
     expect(usersInsert).toMatch(/FALSE/);
     expect(usersInsert).toMatch(/'pending'/i);
@@ -106,7 +106,7 @@ describe('registration', () => {
 
   it('creates a pharmacist as INACTIVE and writes the pharmacist profile (§9.8)', async () => {
     const conn = mockConn();
-    conn.execute.mockResolvedValueOnce([{ insertId: 7 }]).mockResolvedValueOnce([{}]);
+    conn.execute.mockResolvedValueOnce([[]]).mockResolvedValueOnce([{ insertId: 7 }]).mockResolvedValueOnce([{}]);
     mockGetConnection.mockResolvedValue(conn);
 
     const res = await registerPharmacist(
@@ -115,19 +115,19 @@ describe('registration', () => {
     );
 
     expect(res.id).toBe(7);
-    const usersInsert = conn.execute.mock.calls[0][0] as string;
+    const usersInsert = conn.execute.mock.calls[1][0] as string;
     expect(usersInsert).toMatch(/'pharmacist'/);
     expect(usersInsert).toMatch(/FALSE/); // inactive until an admin approves
     expect(usersInsert).toMatch(/'pending'/i);
-    const profileInsert = conn.execute.mock.calls[1][0] as string;
+    const profileInsert = conn.execute.mock.calls[2][0] as string;
     expect(profileInsert).toMatch(/INSERT INTO pharmacist/i);
-    expect(conn.execute.mock.calls[1][1]).toEqual([7, 'Ph', 'Central']);
+    expect(conn.execute.mock.calls[2][1]).toEqual([7, 'Ph', 'Central']);
     expect(conn.commit).toHaveBeenCalled();
   });
 
   it('rolls back and returns 409 on a duplicate email', async () => {
     const conn = mockConn();
-    conn.execute.mockRejectedValueOnce({ errno: 1062, code: 'ER_DUP_ENTRY' });
+    conn.execute.mockResolvedValueOnce([[]]).mockRejectedValueOnce({ errno: 1062, code: 'ER_DUP_ENTRY' });
     mockGetConnection.mockResolvedValue(conn);
 
     await expect(

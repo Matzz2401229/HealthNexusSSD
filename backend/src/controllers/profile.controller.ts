@@ -64,6 +64,12 @@ export async function updateProfile(req: Request, res: Response): Promise<void> 
   const user = req.session.user!;
   await profileService.updateProfile(user.id, user.role, fields);
   const profile = await profileService.getProfile(user.id, user.role);
+  if (typeof profile.full_name === 'string') {
+    req.session.user = { ...user, fullName: profile.full_name };
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err) => (err ? reject(err) : resolve()));
+    });
+  }
   res.status(200).json({ message: 'Profile updated.', profile });
 }
 
