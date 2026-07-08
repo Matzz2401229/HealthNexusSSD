@@ -113,11 +113,11 @@ jobs:
   #   AWS_HOST, AWS_USER, AWS_SSH_KEY, AWS_APP_DIR
   # The VM keeps its own .env file; GitHub never stores or copies it.
   # ---------------------------------------------------------------------
-  deploy-dev:
-    name: Deploy dev to AWS VM
+  deploy-main:
+    name: Deploy main to AWS VM
     runs-on: ubuntu-latest
     needs: [backend, frontend, sast, secret-scan]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Validate deploy secrets
         env:
@@ -140,9 +140,9 @@ jobs:
           script_stop: true
           script: |
             cd "${{ secrets.AWS_APP_DIR }}"
-            git fetch origin dev
-            git checkout dev
-            git reset --hard origin/dev
+            git fetch origin main
+            git checkout main
+            git reset --hard origin/main
             docker compose up --build -d
             docker compose ps
             for attempt in $(seq 1 30); do
