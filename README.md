@@ -32,65 +32,208 @@ security is a core requirement. Four roles: **patient, doctor, pharmacist, admin
 The `backend/src/middleware/` folder is a 1:1 match to the D1 "Security
 Middleware" box — see the D1 design brief §3 for the security acceptance checklist.
 
-## Getting started (every team member)
+## First-time setup
 
-### 1. Prerequisites (install once on your machine)
-| Tool | Why | Notes |
-|---|---|---|
-| **Node.js 20 LTS** | run backend + frontend | matches the `node:20` Docker images |
-| **npm** | install dependencies | ships with Node |
-| **Git** | clone / branch / PR | — |
-| **Docker Desktop** | full-stack run + MySQL | only needed for `docker compose up`; must be running |
+Use the Docker setup for the full app. It starts nginx, the React frontend,
+the Express backend, and MySQL together.
 
-> `node_modules/` is **not** in git by design — everyone installs dependencies
-> locally with `npm install`. Nothing is installed globally.
+### 1. Prerequisites
+| Tool | Why |
+|---|---|
+| **Git** | Clone the repository |
+| **Docker + Docker Compose** | Run the full stack |
+| **OpenSSL** | Generate a local TLS certificate |
+| **Node.js 20 + npm** | Optional, only needed for running tests/lint outside Docker |
 
-### 2. One-time repo setup
+On a fresh Ubuntu VM, install Docker first:
+```bash
+sudo apt update
+sudo apt install -y docker.io docker-compose-v2
+sudo systemctl enable docker
+sudo systemctl start docker
+sudo usermod -aG docker $USER
+newgrp docker
+
+docker --version
+docker compose version
+```
+
+On macOS, install and start Docker Desktop before running Docker commands.
+
+### 2. Clone the repo
 ```bash
 git clone https://github.com/Matzz2401229/HealthNexusSSD.git
 cd HealthNexusSSD
-git checkout main && git pull
-
-cd backend  && npm install && cd ..     # backend dependencies
-cd frontend && npm install && cd ..     # frontend dependencies
-
-cp .env.example .env                     # local env file (never committed)
 ```
 
-### 3. Run it — three options
-
-**A. Frontend only (fastest, see the PWA UI — no DB/backend needed)**
+### 3. Create `.env`
 ```bash
-cd frontend && npm run dev               # http://localhost:3000
+cp .env.example .env
 ```
 
-**B. Backend only (boots + serves /api health; DB calls need a database)**
+Edit `.env`:
 ```bash
-cd backend && npm run dev                # http://localhost:8080
-# check:  curl http://localhost:8080/health   -> {"status":"ok"}
+nano .env
 ```
 
-**C. Full stack via Docker (nginx TLS -> frontend + backend -> MySQL)**
-> nginx needs a TLS cert/key at `nginx/certs/` (gitignored). Generate a
-> self-signed pair for local dev — never commit real keys.
+Update at least these values before running:
+```env
+MYSQL_PASSWORD=your_app_db_password
+MYSQL_ROOT_PASSWORD=your_root_db_password
+SESSION_SECRET=your_random_32_byte_secret
+```
+
+Generate a strong `SESSION_SECRET` with:
+```bash
+openssl rand -hex 32
+```
+
+For real email verification and forgot-password emails, also configure SMTP:
+```env
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your_email@gmail.com
+SMTP_PASSWORD=your_email_app_password
+SMTP_FROM=your_email@gmail.com
+```
+
+Usually keep these as-is for local Docker:
+```env
+NODE_ENV=development
+BACKEND_PORT=8080
+ENABLE_DEV_AUTH=false
+MYSQL_HOST=db
+MYSQL_PORT=3306
+MYSQL_DATABASE=healthnexus
+MYSQL_USER=healthnexus_app
+ALLOW_DEV_CODES=false
+FRONTEND_API_BASE_URL=https://localhost/api
+```
+
+Never commit `.env`. Only `.env.example` belongs in Git.
+
+### 4. Generate local HTTPS certificate
+For local machine:
 ```bash
 mkdir -p nginx/certs
 openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
-  -keyout nginx/certs/privkey.pem -out nginx/certs/fullchain.pem \
+  -keyout nginx/certs/privkey.pem \
+  -out nginx/certs/fullchain.pem \
   -subj "/CN=localhost"
-
-docker compose up --build                # https://localhost (accept self-signed warning)
 ```
 
-### 4. Backend dev commands
+For a VM public IP, replace the subject with your VM IP:
+```bash
+mkdir -p nginx/certs
+openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+  -keyout nginx/certs/privkey.pem \
+  -out nginx/certs/fullchain.pem \
+  -subj "/CN=YOUR_VM_PUBLIC_IP"
+```
+
+The browser will show a privacy warning because this is a self-signed
+certificate. For local/demo use, click **Advanced** and proceed. For real
+production, use a real domain and a trusted certificate such as Let's Encrypt.
+
+### 5. Start the full stack
+```bash
+docker compose up --build -d
+```
+
+Check containers:
+```bash
+docker compose ps
+```
+
+Check backend health:
+```bash
+curl -k https://localhost/api/health
+```
+
+Expected:
+```json
+{"status":"ok"}
+```
+
+Open the app:
+```text
+https://localhost
+```
+
+For a VM:
+```text
+https://YOUR_VM_PUBLIC_IP
+```
+
+### 6. Load seed data
+Run the SQL seed first:
+```bash
+docker compose exec -T db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" healthnexus' < db/seed.sql
+```
+
+Then generate the seeded PDF files:
+```bash
+docker compose exec backend npm run seed:documents
+```
+
+Seed login password for all seeded accounts:
+```text
+Password123!
+```
+
+Example seeded account:
+```text
+admin@test.com
+Password123!
+```
+
+Other seeded accounts include:
+```text
+patient@test.com
+doctor@test.com
+pharmacist@test.com
+patient2@test.com
+doctor2@test.com
+patient3@test.com
+doctor3@test.com
+```
+
+If PDF seeding fails with `EACCES: permission denied`, fix upload-folder
+ownership and rerun the PDF seed:
+```bash
+sudo mkdir -p backend/uploads
+sudo chown -R 1000:1000 backend/uploads
+docker compose restart backend
+docker compose exec backend npm run seed:documents
+```
+
+### 7. Optional local development commands
+Only needed if you want to run tests/lint/build outside Docker:
 ```bash
 cd backend
-npm run dev      # ts-node-dev (hot reload)
-npm test         # jest + coverage (should show 12 passing)
-npm run lint     # eslint
+npm install
+npm test
+npm run lint
+npm run build
+
+cd ../frontend
+npm install
+npm run lint
+npm run build
 ```
 
-### 5. Contributing (workflow — SDR2)
+### 8. Common Docker commands
+```bash
+docker compose ps
+docker compose logs -f backend
+docker compose logs -f frontend
+docker compose logs -f db
+docker compose down
+docker compose up --build -d
+```
+
+## Contributing (workflow — SDR2)
 `main` is protected and auto-deploys. Never push to it directly. Work on a
 short-lived feature branch per workstream (D1 design brief §8), then open a PR.
 ```bash
