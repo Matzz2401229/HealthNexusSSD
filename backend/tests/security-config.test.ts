@@ -8,7 +8,7 @@ function readRepoFile(relativePath: string): string {
 }
 
 describe('security configuration', () => {
-  it('blocks secret and SAST findings in CI without fake deploy jobs', () => {
+  it('blocks secret and SAST findings in CI and gates real dev deployment', () => {
     const workflow = readRepoFile('.github/workflows/ci-cd.yml');
 
     expect(workflow).toContain('gitleaks/gitleaks-action@v2');
@@ -16,7 +16,14 @@ describe('security configuration', () => {
     expect(workflow).toContain('semgrep --config');
     expect(workflow).toContain('--error');
     expect(workflow).not.toContain('continue-on-error');
-    expect(workflow).not.toMatch(/\bdeploy\b/i);
+    expect(workflow).toContain('deploy-dev:');
+    expect(workflow).toContain('needs: [backend, frontend, sast, secret-scan]');
+    expect(workflow).toContain("github.ref == 'refs/heads/dev'");
+    expect(workflow).toContain('appleboy/ssh-action');
+    expect(workflow).toContain('secrets.AWS_HOST');
+    expect(workflow).toContain('git reset --hard origin/dev');
+    expect(workflow).toContain('docker compose up --build -d');
+    expect(workflow).toContain('curl -k -fsS https://localhost/api/health');
   });
 
   it('keeps production Docker dev-auth and dev-code flags disabled', () => {
