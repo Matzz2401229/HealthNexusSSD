@@ -108,7 +108,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------
-  # Deployment — only after all CI/security checks pass on dev.
+  # Deployment — only after all CI/security checks pass on main.
   # Required repo secrets:
   #   AWS_HOST, AWS_USER, AWS_SSH_KEY, AWS_APP_DIR
   # The VM keeps its own .env file; GitHub never stores or copies it.
