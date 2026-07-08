@@ -6,22 +6,26 @@ import { validatePasswordPolicy } from '../src/utils/password';
 
 describe('validatePasswordPolicy', () => {
   it('accepts a strong 12+ char password', () => {
-    expect(validatePasswordPolicy('Str0ng!Passw0rd')).toBeNull();
+    expect(validatePasswordPolicy('Str0ng!Passw0rd')).toEqual([]);
   });
 
   it('rejects passwords shorter than 12 chars', () => {
-    expect(validatePasswordPolicy('Ab1!short')).toMatch(/at least 12/);
+    const result = validatePasswordPolicy('Ab1!short');
+    expect(result).toEqual(expect.arrayContaining([expect.stringContaining('at least 12')]));
   });
 
   it('requires an uppercase letter', () => {
-    expect(validatePasswordPolicy('str0ng!passw0rd')).toMatch(/uppercase/);
+    const result = validatePasswordPolicy('str0ng!passw0rd');
+    expect(result).toEqual(expect.arrayContaining([expect.stringContaining('uppercase')]));
   });
 
   it('requires a digit', () => {
-    expect(validatePasswordPolicy('Strong!Password')).toMatch(/digit/);
+    const result = validatePasswordPolicy('Strong!Password');
+    expect(result).toEqual(expect.arrayContaining([expect.stringContaining('digit')]));
   });
 
   it('requires a special character', () => {
-    expect(validatePasswordPolicy('Str0ngPassw0rd')).toMatch(/special/);
+    const result = validatePasswordPolicy('Str0ngPassw0rd');
+    expect(result).toEqual(expect.arrayContaining([expect.stringContaining('special')]));
   });
 });

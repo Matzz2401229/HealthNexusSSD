@@ -1,49 +1,57 @@
-/**
- * Authentication middleware (D1 §9.1).
- * Establishes WHO the request is from, using ONLY the server-side session.
- * Identity/role are never read from client-supplied params/headers/body.
- *
- * SKELETON: wire this to the real session store (auth.service.ts). The shape
- * below is what downstream rbac/ownership middleware expect on req.user.
- */
 import { Request, Response, NextFunction } from 'express';
+import { AppError } from '../utils/AppError';
+import { SessionUser } from '../types/session';
+import { config } from '../config/env';
 
-export type Role = 'patient' | 'doctor' | 'pharmacist' | 'admin';
-
-export interface AuthenticatedUser {
-  id: number;
-  role: Role;
-}
-
-// Augment Express's Request with the authenticated user.
-declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
-  namespace Express {
-    interface Request {
-      user?: AuthenticatedUser;
-    }
-  }
-}
+export type Role = SessionUser['role'];
 
 /**
- * Deny-by-default: reject unless a valid server-side session resolves to a user.
- * Generic 401 message — no detail that aids enumeration.
+ * Authentication guards (auth workstream).
+ * Identity/role/status come from `req.session.user` — the server-side session
+ * — and NEVER from client-supplied input (FSR2). Deny-by-default (SR1).
  */
-export function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  // TODO: look up session from the Secure/HttpOnly/SameSite cookie, validate
-  // it against the server-side session store, enforce idle (15m) + absolute
-  // (8h) timeouts, then attach req.user.
-  const user = resolveSessionUser(req);
+
+// NFSR5: absolute session timeout — regardless of activity. This is separate
+// from the idle timeout, which the rolling session cookie (config/session.ts)
+// already handles.
+const ABSOLUTE_TIMEOUT_MS = config.session.absoluteTimeoutHr * 60 * 60 * 1000;
+
+function isAbsoluteTimeoutExceeded(user: SessionUser): boolean {
+  return Date.now() - user.loginAt > ABSOLUTE_TIMEOUT_MS;
+}
+
+/** Destroys an expired session server-side (D1 9.1) and denies the request. */
+function rejectExpiredSession(req: Request): never {
+  req.session.destroy(() => {});
+  throw new AppError(401, 'Authentication required.');
+}
+/** Requires any authenticated user. */
+export function requireAuth(req: Request, _res: Response, next: NextFunction): void {
+  const user = req.session.user;
   if (!user) {
-    res.status(401).json({ error: 'Authentication required.' });
-    return;
+    throw new AppError(401, 'Authentication required.');
   }
-  req.user = user;
+  if (isAbsoluteTimeoutExceeded(user)) {
+    rejectExpiredSession(req);
+  }
   next();
 }
 
-/** Placeholder session resolver — replace with the real session store lookup. */
-function resolveSessionUser(_req: Request): AuthenticatedUser | null {
-  // TODO: implement in the Auth & session workstream.
-  return null;
+/**
+ * Requires an authenticated user whose account is fully active. This is what
+ * blocks a *pending* doctor from reaching patient-facing features while their
+ * approval is still outstanding (FSR5).
+ */
+export function requireActive(req: Request, _res: Response, next: NextFunction): void {
+  const user = req.session.user;
+  if (!user) {
+    throw new AppError(401, 'Authentication required.');
+  }
+  if (isAbsoluteTimeoutExceeded(user)) {
+    rejectExpiredSession(req);
+  }
+  if (user.status !== 'active') {
+    throw new AppError(403, 'Your account is not active.');
+  }
+  next();
 }

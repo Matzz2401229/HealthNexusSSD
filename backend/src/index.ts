@@ -10,6 +10,9 @@ import { logger } from './utils/logger';
 import { securityHeaders } from './middleware/securityHeaders';
 import { csrfProtection } from './middleware/csrf';
 import { errorHandler, notFound } from './middleware/errorHandler';
+import { devAuth } from './middleware/devAuth';
+import { sessionMiddleware } from './config/session';
+import { requestLogger } from './middleware/requestLogger';
 import routes from './routes';
 
 const app = express();
@@ -18,8 +21,11 @@ const app = express();
 app.set('trust proxy', 1);
 
 app.use(securityHeaders);
-app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
+app.use(sessionMiddleware);
+app.use(devAuth);
+app.use(express.json({ limit: '1mb' }));
+app.use(requestLogger);
 app.use(csrfProtection);
 
 app.use('/', routes);
