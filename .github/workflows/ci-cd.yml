@@ -119,6 +119,18 @@ jobs:
     needs: [backend, frontend, sast, secret-scan]
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     steps:
+      - name: Validate deploy secrets
+        env:
+          AWS_HOST: ${{ secrets.AWS_HOST }}
+          AWS_USER: ${{ secrets.AWS_USER }}
+          AWS_SSH_KEY: ${{ secrets.AWS_SSH_KEY }}
+          AWS_APP_DIR: ${{ secrets.AWS_APP_DIR }}
+        run: |
+          test -n "$AWS_HOST" || { echo "Missing GitHub Actions secret: AWS_HOST"; exit 1; }
+          test -n "$AWS_USER" || { echo "Missing GitHub Actions secret: AWS_USER"; exit 1; }
+          test -n "$AWS_SSH_KEY" || { echo "Missing GitHub Actions secret: AWS_SSH_KEY"; exit 1; }
+          test -n "$AWS_APP_DIR" || { echo "Missing GitHub Actions secret: AWS_APP_DIR"; exit 1; }
+
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -133,4 +145,13 @@ jobs:
             git reset --hard origin/dev
             docker compose up --build -d
             docker compose ps
-            curl -k -fsS https://localhost/api/health
+            for attempt in $(seq 1 30); do
+              if curl -k -fsS https://localhost/api/health; then
+                exit 0
+              fi
+              echo "Health check not ready yet (attempt $attempt/30). Retrying..."
+              sleep 2
+            done
+            docker compose logs --tail=80 backend
+            docker compose logs --tail=80 nginx
+            exit 1
