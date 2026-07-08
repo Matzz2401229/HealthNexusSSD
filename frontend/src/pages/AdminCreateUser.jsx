@@ -19,7 +19,26 @@ export default function AdminCreateUser() {
       e.preventDefault();
 
       try {
-        await apiPost('/admin/users', newUser);
+        const payload = {
+          name: newUser.name,
+          email: newUser.email,
+          password: newUser.password,
+          role: newUser.role,
+        };
+
+        if (newUser.role === "patient") {
+          payload.dateOfBirth = newUser.dateOfBirth;
+        }
+
+        if (newUser.role === "doctor") {
+          payload.specialty = newUser.specialty;
+        }
+
+        if (newUser.role === "pharmacist") {
+          payload.pharmacy = newUser.pharmacy;
+        }
+
+        await apiPost("/admin/users", payload);
 
         setMessage('User created.');
 
